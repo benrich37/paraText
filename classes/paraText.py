@@ -67,8 +67,8 @@ class paraText(tk.Text):
     ############ vvv
     ### vvv
 
-    def get_replace_type_color(self, tagname):
-        replace_type = self.get_replace_type(tagname)
+    def get_replace_type_color(self, tag):
+        replace_type = self.get_replace_type(tag)
         return self.replace_type_dict[replace_type]
 
     def change_highlight_default(self, event, widget):
@@ -119,12 +119,12 @@ class paraText(tk.Text):
     ############ vvv
     ### vvv
 
-    def get_replace_type(self, tagname):
-        tag1 = tagname[0:5]
+    def get_replace_type(self, tag):
+        tag1 = tag[0:5]
         if tag1 == self.isoFlag:
             return self.replace_types[0]
         elif tag1 == self.repFlag:
-            synctag = self.parse_child_rep_id(tagname)[1]
+            synctag = self.parse_child_rep_id(tag)[1]
             if synctag == self.syncTrue:
                 return self.replace_types[1]
             else:
@@ -192,11 +192,11 @@ class paraText(tk.Text):
     ############ vvv
     ### vvv
 
-    def append_options(self, tagname, opt_list):
-        if not tagname in self.replace_tags:
-            self.replace_tags[tagname] = []
+    def append_options(self, tag, opt_list):
+        if not tag in self.replace_tags:
+            self.replace_tags[tag] = []
         for i in range(len(opt_list)):
-            utils.append_no_dup(opt_list[i], self.replace_tags[tagname])
+            utils.append_no_dup(opt_list[i], self.replace_tags[tag])
 
     def get_synced_tags(self, given_tags):
         synced_tags = []
@@ -206,10 +206,10 @@ class paraText(tk.Text):
                 synced_tags.append(given_tags[i])
         return synced_tags
 
-    def replace_text_handler(self, chosen_text, target_tagname):
-        init_bounds = self.tag_ranges(target_tagname)
+    def replace_text_handler(self, chosen_text, target_tag):
+        init_bounds = self.tag_ranges(target_tag)
         if len(init_bounds) > 0:
-            utils.insert(self, target_tagname, chosen_text)
+            utils.insert(self, target_tag, chosen_text)
             self.delete(init_bounds[0], init_bounds[1])
 
     def replace_text(self, event, chosen_text, target_i):
@@ -233,7 +233,7 @@ class paraText(tk.Text):
             else:
                 self.change_highlight_up(event, event.widget)
 
-    def change_child_tagname_sync_flag(self, oldtag, new_sync_flag, parent_tag):
+    def change_child_tag_sync_flag(self, oldtag, new_sync_flag, parent_tag):
         ## NOTE: This function changes the paratext memory as well as returning the new tag for convenience
         idx, old_sync, pattern = self.parse_child_rep_id(oldtag)
         newtag = self.child_rep_id(idx, new_sync_flag, pattern)
@@ -247,12 +247,12 @@ class paraText(tk.Text):
         return newtag
 
     def change_sync_to_false(self, event, target_tags, attacker_tag, parent_tag):
-        new_attacker_tag = self.change_child_tagname_sync_flag(attacker_tag, self.syncFalse, parent_tag)
+        new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncFalse, parent_tag)
         self.setup_rep_bind_tag(parent_tag)
         # self.setup_rep_bind_tag_attacker(new_attacker_tag, [new_attacker_tag], parent_tag)
 
     def change_sync_to_true(self, event, target_tags, attacker_tag, parent_tag):
-        new_attacker_tag = self.change_child_tagname_sync_flag(attacker_tag, self.syncTrue, parent_tag)
+        new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncTrue, parent_tag)
         # self.setup_rep_bind_tag_attacker(new_attacker_tag, target_tags, parent_tag)
         self.setup_rep_bind_tag(parent_tag)
 
@@ -395,13 +395,13 @@ class paraText(tk.Text):
         matches = utils.return_matches(self, pattern)
         start_id = self.get_init_rep_id(pattern)
         for i in range(len(matches)):
-            ctagname_i = self.child_rep_id(start_id + i,
+            ctag_i = self.child_rep_id(start_id + i,
                                            synctag,
                                            pattern)
-            self.append_child_tags(parent_tag, ctagname_i)
+            self.append_child_tags(parent_tag, ctag_i)
             bound1 = matches[i]
             bound2 = utils.add_to_idx(matches[i], len(pattern))
-            self.tag_add(ctagname_i,
+            self.tag_add(ctag_i,
                          bound1,
                          bound2
                          )
