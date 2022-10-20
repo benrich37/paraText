@@ -1,9 +1,4 @@
 import tkinter as tk
-from tkinter import ttk
-from libs import utils
-import sys
-import copy
-import time
 from classes import paraText
 
 root = tk.Tk()
@@ -22,13 +17,3 @@ myText.add_tag_rep(rephrasings[0], rephrasings, sync=myText.syncFalse)
 # myText.config(state=tk.DISABLED)
 
 root.mainloop()
-import math
-# print(hex(math.floor(23.6)))
-# print(utils.get_hex(23.3))
-# hexcolor = "#FF9D3B"
-# print(utils.short_hex_alpha_to_dec_alpha("12"))
-
-# ex_list = ["dfsg", "weqfgd", "efr"]
-# for i, j in enumerate(ex_list):
-#     print(i)
-#     print(j)
