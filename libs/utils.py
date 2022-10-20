@@ -34,20 +34,6 @@ def short_hex_to_dec(short_hex):
         return_sum += dig_dec
     return return_sum
 
-def get_hex_alpha(hexcolor):
-    if hexcolor[0] != "#":
-        raise ValueError
-    else:
-        return hexcolor[1:3]
-
-def set_hex_alpha(hexcolor, alpha):
-    if hexcolor[0] != "#":
-        raise ValueError
-    else:
-        alpha_hex = get_short_hex(2.56*alpha)
-    return "#" + alpha_hex + hexcolor[3:]
-
-
 def index_to_ints(index):
     split = index.index('.')
     line_idx = int(index[0:split])
