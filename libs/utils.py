@@ -1,6 +1,3 @@
-import tkinter as tk
-from tkinter import ttk
-import time
 import math
 
 hex_chars = "0123456789ABCDEF"
