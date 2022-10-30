@@ -1,6 +1,3 @@
-import tkinter as tk
-from tkinter import ttk
-import time
 import math
 
 hex_chars = "0123456789ABCDEF"
@@ -36,20 +33,6 @@ def short_hex_to_dec(short_hex):
         dig_dec = hex_chars.index(short_hex[i])*(16**(digs-1-i))
         return_sum += dig_dec
     return return_sum
-
-def get_hex_alpha(hexcolor):
-    if hexcolor[0] != "#":
-        raise ValueError
-    else:
-        return hexcolor[1:3]
-
-def set_hex_alpha(hexcolor, alpha):
-    if hexcolor[0] != "#":
-        raise ValueError
-    else:
-        alpha_hex = get_short_hex(2.56*alpha)
-    return "#" + alpha_hex + hexcolor[3:]
-
 
 def index_to_ints(index):
     split = index.index('.')

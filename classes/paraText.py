@@ -67,8 +67,8 @@ class paraText(tk.Text):
     ############ vvv
     ### vvv
 
-    def get_replace_type_color(self, tagname):
-        replace_type = self.get_replace_type(tagname)
+    def get_replace_type_color(self, tag):
+        replace_type = self.get_replace_type(tag)
         return self.replace_type_dict[replace_type]
 
     def change_highlight_default(self, event, widget):
@@ -119,12 +119,12 @@ class paraText(tk.Text):
     ############ vvv
     ### vvv
 
-    def get_replace_type(self, tagname):
-        tag1 = tagname[0:5]
+    def get_replace_type(self, tag):
+        tag1 = tag[0:5]
         if tag1 == self.isoFlag:
             return self.replace_types[0]
         elif tag1 == self.repFlag:
-            synctag = self.parse_child_rep_id(tagname)[1]
+            synctag = self.parse_child_rep_id(tag)[1]
             if synctag == self.syncTrue:
                 return self.replace_types[1]
             else:
@@ -176,9 +176,9 @@ class paraText(tk.Text):
 
     def get_init_rep_id(self, pattern):
         start_id = None
-        ptagname = self.parent_rep_id(pattern)
+        parent_tag = self.parent_rep_id(pattern)
         # if len(self.rep_replace_tags[self.parent_rep_id(pattern)]) == 0:
-        if not ptagname in self.rep_replace_tags:
+        if not parent_tag in self.rep_replace_tags:
             start_id = 0
         else:
             start_id = self.get_last_rep_id(pattern)
@@ -192,11 +192,11 @@ class paraText(tk.Text):
     ############ vvv
     ### vvv
 
-    def append_options(self, tagname, opt_list):
-        if not tagname in self.replace_tags:
-            self.replace_tags[tagname] = []
+    def append_options(self, tag, opt_list):
+        if not tag in self.replace_tags:
+            self.replace_tags[tag] = []
         for i in range(len(opt_list)):
-            utils.append_no_dup(opt_list[i], self.replace_tags[tagname])
+            utils.append_no_dup(opt_list[i], self.replace_tags[tag])
 
     def get_synced_tags(self, given_tags):
         synced_tags = []
@@ -206,10 +206,10 @@ class paraText(tk.Text):
                 synced_tags.append(given_tags[i])
         return synced_tags
 
-    def replace_text_handler(self, chosen_text, target_tagname):
-        init_bounds = self.tag_ranges(target_tagname)
+    def replace_text_handler(self, chosen_text, target_tag):
+        init_bounds = self.tag_ranges(target_tag)
         if len(init_bounds) > 0:
-            utils.insert(self, target_tagname, chosen_text)
+            utils.insert(self, target_tag, chosen_text)
             self.delete(init_bounds[0], init_bounds[1])
 
     def replace_text(self, event, chosen_text, target_i):
@@ -233,7 +233,7 @@ class paraText(tk.Text):
             else:
                 self.change_highlight_up(event, event.widget)
 
-    def change_child_tagname_sync_flag(self, oldtag, new_sync_flag, parent_tag):
+    def change_child_tag_sync_flag(self, oldtag, new_sync_flag, parent_tag):
         ## NOTE: This function changes the paratext memory as well as returning the new tag for convenience
         idx, old_sync, pattern = self.parse_child_rep_id(oldtag)
         newtag = self.child_rep_id(idx, new_sync_flag, pattern)
@@ -247,12 +247,12 @@ class paraText(tk.Text):
         return newtag
 
     def change_sync_to_false(self, event, target_tags, attacker_tag, parent_tag):
-        new_attacker_tag = self.change_child_tagname_sync_flag(attacker_tag, self.syncFalse, parent_tag)
+        new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncFalse, parent_tag)
         self.setup_rep_bind_tag(parent_tag)
         # self.setup_rep_bind_tag_attacker(new_attacker_tag, [new_attacker_tag], parent_tag)
 
     def change_sync_to_true(self, event, target_tags, attacker_tag, parent_tag):
-        new_attacker_tag = self.change_child_tagname_sync_flag(attacker_tag, self.syncTrue, parent_tag)
+        new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncTrue, parent_tag)
         # self.setup_rep_bind_tag_attacker(new_attacker_tag, target_tags, parent_tag)
         self.setup_rep_bind_tag(parent_tag)
 
@@ -269,8 +269,8 @@ class paraText(tk.Text):
             else:
                 self.change_sync_to_true(event, target_tags, attacker_tag, parent_tag)
 
-    def new_option(self, event, frame, ptagname, target_tags, opt_idx, attacker_tag):
-        opt_list = self.replace_tags[ptagname]
+    def new_option(self, event, frame, parent_tag, target_tags, opt_idx, attacker_tag):
+        opt_list = self.replace_tags[parent_tag]
         new_opt = tk.Label(master=frame, text=opt_list[opt_idx], borderwidth=1, relief="solid")
         new_opt.config(background=self.default_color)
         new_opt.bind('<Button-1>', lambda e: self.change_highlight_sel(e, new_opt))
@@ -283,12 +283,12 @@ class paraText(tk.Text):
         type_box = tk.Label(master=frame, text=replace_type[0], background=color)
         return type_box
 
-    def gen_options(self, event, ptagname, target_tags, attacker_tag):
-        opt_list = self.replace_tags[ptagname]
+    def gen_options(self, event, parent_tag, target_tags, attacker_tag):
+        opt_list = self.replace_tags[parent_tag]
         frame = ttk.Frame(self.master)
         opt_boxes = []
         for i in range(len(opt_list)):
-            opt_boxes.append(self.new_option(event, frame, ptagname, target_tags, i, attacker_tag))
+            opt_boxes.append(self.new_option(event, frame, parent_tag, target_tags, i, attacker_tag))
             opt_boxes[i].grid(row=i, column=1, sticky=tk.W)
         replace_type = self.get_replace_type(attacker_tag)
         type_box = self.gen_typebox(replace_type, frame)
@@ -339,11 +339,11 @@ class paraText(tk.Text):
         self.widget_holder = frame
         self.after(500, self.clear_widget_holder)
 
-    def setup_rep_bind_tag_attacker(self, attacker_tag, target_tags, ptagname):
+    def setup_rep_bind_tag_attacker(self, attacker_tag, target_tags, parent_tag):
         self.tag_bind(attacker_tag,
                       '<Button-2>',
                       lambda e: self.gen_options(e,
-                                                 ptagname,
+                                                 parent_tag,
                                                  target_tags,
                                                  attacker_tag
                                                  )
@@ -356,7 +356,7 @@ class paraText(tk.Text):
                       )
         self.tag_bind(attacker_tag,
                       '<Shift-Button-1>',
-                      lambda e: self.change_sync(e, target_tags, attacker_tag, ptagname)
+                      lambda e: self.change_sync(e, target_tags, attacker_tag, parent_tag)
                       )
         sync_flag = self.parse_child_rep_id(attacker_tag)
         underline_color = self.get_replace_type_color(attacker_tag)
@@ -367,9 +367,9 @@ class paraText(tk.Text):
                         )
         self.update_idletasks()
 
-    def setup_rep_bind_tag(self, ptagname):
+    def setup_rep_bind_tag(self, parent_tag):
         # attacker_tags are tags which we will bind replace commands upon
-        attacker_tags = self.rep_replace_tags[ptagname]
+        attacker_tags = self.rep_replace_tags[parent_tag]
         # target_tags are the tags which will undergo text replacement if a command is executed
         target_tags = []
         # synced_tags indicate tags which are synced to each other
@@ -381,28 +381,28 @@ class paraText(tk.Text):
                 target_tags = copy.deepcopy(syncd_tags)
             else:
                 target_tags = [attacker_tags[i]]
-            self.setup_rep_bind_tag_attacker(attacker_tags[i], target_tags, ptagname)
+            self.setup_rep_bind_tag_attacker(attacker_tags[i], target_tags, parent_tag)
 
-    def append_child_tags(self, ptagname, ctagname):
-        if not ptagname in self.rep_replace_tags:
-            self.rep_replace_tags[ptagname] = []
-        utils.append_no_dup(ctagname, self.rep_replace_tags[ptagname])
+    def append_child_tags(self, parent_tag, child_tag):
+        if not parent_tag in self.rep_replace_tags:
+            self.rep_replace_tags[parent_tag] = []
+        utils.append_no_dup(child_tag, self.rep_replace_tags[parent_tag])
 
     def add_tag_rep(self, pattern, opt_list, sync=None):
-        ptagname = self.parent_rep_id(pattern)
+        parent_tag = self.parent_rep_id(pattern)
         synctag = self.interp_sync_arg(sync)
-        self.append_options(ptagname, opt_list)
+        self.append_options(parent_tag, opt_list)
         matches = utils.return_matches(self, pattern)
         start_id = self.get_init_rep_id(pattern)
         for i in range(len(matches)):
-            ctagname_i = self.child_rep_id(start_id + i,
+            ctag_i = self.child_rep_id(start_id + i,
                                            synctag,
                                            pattern)
-            self.append_child_tags(ptagname, ctagname_i)
+            self.append_child_tags(parent_tag, ctag_i)
             bound1 = matches[i]
             bound2 = utils.add_to_idx(matches[i], len(pattern))
-            self.tag_add(ctagname_i,
+            self.tag_add(ctag_i,
                          bound1,
                          bound2
                          )
-        self.setup_rep_bind_tag(ptagname)
+        self.setup_rep_bind_tag(parent_tag)
