@@ -38,7 +38,8 @@ class paraText(tk.Text):
     # _REP_3_CNT_TRUE_SNC_blahblah
     ## a tag with surface text blahblah with personal id '3' and requests sync
     ### (a change to another tag with the same surface pattern will trigger a change to this tag, and vice versa)
-
+    
+    # https://htmlcolorcodes.com/color-picker/
     default_color="#FF5E3B"
     default_opaque_color = "#FFFFFF"
     sel_click_color="#3BB3FF"
