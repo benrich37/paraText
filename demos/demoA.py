@@ -1,4 +1,8 @@
 import tkinter as tk
+import os
+import sys
+mainpath = os.path.join(os.path.dirname(__file__), '../')
+sys.path.append(mainpath)
 from classes import paraText
 
 root = tk.Tk()
