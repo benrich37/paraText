@@ -147,9 +147,6 @@ class paraText(tk.Text):
         else:
             raise ValueError("Unexpected tag")
 
-    def return_reptag_i(self, idx, sync, pattern):
-        return self.child_rep_id(idx, sync, pattern)
-
     def child_rep_id(self, idx, sync, pattern):
         return self.repFlag + str(idx) + self.repIdFlag + str(sync) + self.syncFlag + pattern
 
