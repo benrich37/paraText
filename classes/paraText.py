@@ -294,8 +294,12 @@ class paraText(tk.Text):
         self.gen_changing_typebox(event, attacker_tag)
         type_flag = attacker_tag[0:5]
         if type_flag == self.isoFlag:
+            # This should just act as a "do nothing" action because isoFlags don't have sync options
             self.focus_set()
         else:
+            # Return just the sync flag
+            # (parent rep tags can't become an attacker_tag because they're just used for internal memory and never
+            # get tagged to actual text)
             sync_flag = self.parse_child_rep_id(attacker_tag)[1]
             if sync_flag == self.syncTrue:
                 self.change_sync_to_false(event, target_tags, attacker_tag, parent_tag)
@@ -303,6 +307,8 @@ class paraText(tk.Text):
                 self.change_sync_to_true(event, target_tags, attacker_tag, parent_tag)
 
     def new_option(self, event, frame, parent_tag, target_tags, opt_idx, attacker_tag):
+        # Creates a new option box within the gen_options box
+        # New option boxes will execute the replace text action
         opt_list = self.replace_tags[parent_tag]
         new_opt = tk.Label(master=frame, text=opt_list[opt_idx], borderwidth=1, relief="solid")
         new_opt.config(background=self.default_color)
@@ -312,11 +318,14 @@ class paraText(tk.Text):
         return new_opt
 
     def gen_typebox(self, replace_type, frame):
+        # Little box in upper left corner of the gen_options box which tell the user if the text is tagged as iso,
+        # synced, or unsynced
         color = self.replace_type_dict[replace_type]
         type_box = tk.Label(master=frame, text=replace_type[0], background=color)
         return type_box
 
     def gen_options(self, event, parent_tag, target_tags, attacker_tag):
+        # Generates the options dropdown menu
         opt_list = self.replace_tags[parent_tag]
         frame = ttk.Frame(self.master)
         opt_boxes = []
@@ -335,6 +344,8 @@ class paraText(tk.Text):
         self.update_idletasks()
 
     def gen_changing_typebox_get_to_fro(self, attacker_tag):
+        ### REALLY needs to be improved
+        # Literally just returns the current sync type and the sync type being changed to
         type_flag = attacker_tag[0:5]
         if type_flag == self.isoFlag:
             r1 = self.replace_types[0]
