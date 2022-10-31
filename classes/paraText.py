@@ -148,12 +148,16 @@ class paraText(tk.Text):
             raise ValueError("Unexpected tag")
 
     def child_rep_id(self, idx, sync, pattern):
+        # Designated function for constructing tagname for a rep child from class variables and provided
+        # index, sync option, and surface pattern
         return self.repFlag + str(idx) + self.repIdFlag + str(sync) + self.syncFlag + pattern
 
     def parent_rep_id(self, pattern):
+        # Designated function for constructing tagname for a rep parent from class variables and provided surface pattern
         return self.repFlag + pattern
 
     def parse_child_rep_id(self, rep_id):
+        # Takes a rep child's tag, and returns its index, its sync option, and its surface pattern
         try:
             idx1 = len(self.repFlag)
             idx2 = rep_id.index(self.repIdFlag)
@@ -172,6 +176,9 @@ class paraText(tk.Text):
         return return_id, sync_arg, pattern
 
     def interp_sync_arg(self, syncarg):
+        # Helper function for add_tag_rep
+        # Makes sure the syncarg given gets turned into the problem sync option flag
+        # (may need to fix this)
         if syncarg is None:
             syncflag = self.default_sync
         else:
