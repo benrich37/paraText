@@ -186,6 +186,8 @@ class paraText(tk.Text):
         return syncflag
 
     def get_last_rep_id(self, pattern):
+        # Takes a surface pattern, finds its respective rep parent tag, and then finds the rep child tag with the
+        # largest index and returns that index
         ids = []
         rep_ids = self.rep_replace_tags[self.parent_rep_id(pattern)]
         for i in rep_ids:
@@ -194,7 +196,7 @@ class paraText(tk.Text):
         return max(ids)
 
     def get_init_rep_id(self, pattern):
-        start_id = None
+        # Figures out where to start counting in adding new rep child tags with unique indices
         parent_tag = self.parent_rep_id(pattern)
         # if len(self.rep_replace_tags[self.parent_rep_id(pattern)]) == 0:
         if not parent_tag in self.rep_replace_tags:
