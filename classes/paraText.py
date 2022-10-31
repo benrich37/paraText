@@ -82,20 +82,18 @@ class paraText(tk.Text):
         replace_type = self.get_replace_type(tag)
         return self.replace_type_dict[replace_type]
 
-    # def change_highlight_default(self, event, widget):
-    #     widget.config(background=self.default_color)
-    #
-    # def change_highlight_sel(self, event, widget):
-    #     widget.config(background=self.sel_click_color)
-    #
-    # def change_highlight_up(self, event, widget):
-    #     widget.config(background=self.up_click_color)
-    #
-    # def change_highlight_down(self, event, widget):
-    #     widget.config(background=self.down_click_color)
-    #
-    # def change_highlight_neg(self, event, widget):
-    #     widget.config(background=self.neg_click_color)
+
+    # Bunch of functions to change widget backgrounds to class variable colors
+    def change_highlight_default(self, event, widget):
+        widget.config(background=self.default_color)
+    def change_highlight_sel(self, event, widget):
+        widget.config(background=self.sel_click_color)
+    def change_highlight_up(self, event, widget):
+        widget.config(background=self.up_click_color)
+    def change_highlight_down(self, event, widget):
+        widget.config(background=self.down_click_color)
+    def change_highlight_neg(self, event, widget):
+        widget.config(background=self.neg_click_color)
 
     def clear_widget_holder(self):
         # destroy whatever widget is being referenced currently in the widget_holder class variable
@@ -198,7 +196,6 @@ class paraText(tk.Text):
     def get_init_rep_id(self, pattern):
         # Figures out where to start counting in adding new rep child tags with unique indices
         parent_tag = self.parent_rep_id(pattern)
-        # if len(self.rep_replace_tags[self.parent_rep_id(pattern)]) == 0:
         if not parent_tag in self.rep_replace_tags:
             start_id = 0
         else:
@@ -214,12 +211,14 @@ class paraText(tk.Text):
     ### vvv
 
     def append_options(self, tag, opt_list):
+        # Adds an option to the option list for the given tag
         if not tag in self.replace_tags:
             self.replace_tags[tag] = []
         for i in range(len(opt_list)):
             utils.append_no_dup(opt_list[i], self.replace_tags[tag])
 
     def get_synced_tags(self, given_tags):
+        # Returns all the rep child tags with sync turned True
         synced_tags = []
         for i in range(len(given_tags)):
             sync_arg = self.parse_child_rep_id(given_tags[i])[1]
@@ -228,18 +227,24 @@ class paraText(tk.Text):
         return synced_tags
 
     def replace_text_handler(self, chosen_text, target_tag):
+        # Changes the text displayed for tagged text without deleting the tag itself from the Text widget
         init_bounds = self.tag_ranges(target_tag)
         if len(init_bounds) > 0:
             utils.insert(self, target_tag, chosen_text)
             self.delete(init_bounds[0], init_bounds[1])
 
     def replace_text(self, event, chosen_text, target_i):
+        # changes the Text state to normal to allow editing,
+        # replaces the text
+        # deletes whatever widget triggered the text change
+        # changes the Text state back to disabled
         self.config(state=tk.NORMAL)
         self.replace_text_handler(chosen_text, target_i)
         utils.del_fn(event.widget.master)
         self.config(state=tk.DISABLED)
 
     def replace_texts(self, event, chosen_text, target_tags):
+        # helper function to replace the text for multiple tagged selections
         for i in range(len(target_tags)):
             self.replace_text(event, chosen_text, target_tags[i])
 
