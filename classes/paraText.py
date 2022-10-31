@@ -6,6 +6,7 @@ import copy
 
 
 class paraText(tk.Text):
+    # String variables which will be called when constructing tag strings
     repFlag = "_REP_"
     repIdFlag = "_CNT_"
     syncFlag = "_SNC_"
@@ -18,12 +19,14 @@ class paraText(tk.Text):
         syncFalse
     ]
 
+    # listing possible types for cosmetic purposes later on
     replace_types = [
         "iso",
         "synced",
         "unsynced"
     ]
 
+    # Hex colors to sync up with different possible types
     replace_type_dict = {
         replace_types[0]: "#5376FE",
         replace_types[1]: "#FFBCBC",
@@ -52,11 +55,17 @@ class paraText(tk.Text):
     def __init__(self, master=None, cnf={}, **kw):
         tk.Widget.__init__(self, master, 'text', cnf, kw)
         # replace_tags is a dictionary with tags, key values being the options possible
+        ## replace_tags will only have iso tags and parent rep tags
         # if tag has the iso flag, that tag is the tag used
         # if tag has the rep flag, look in rep_replace_tags for all tags actually used (each tag must be unique)
         self.replace_tags = {}
+        # rep_replace_tags is a dictionary with all the parent rep tags being used, and the key values are all the
+        # child rep tags being used
         self.rep_replace_tags = {}
+        # whether setting up rep tags will default to sync them together or not
         self.default_sync = self.syncTrue
+        # May delete later - this is just a temporary variable to store in the paraText class so that particular widgets
+        # can be accessed easily if desired
         self.widget_holder = None
 
 
@@ -69,25 +78,27 @@ class paraText(tk.Text):
     ### vvv
 
     def get_replace_type_color(self, tag):
+        # give a tag, return the designated color for the tag type
         replace_type = self.get_replace_type(tag)
         return self.replace_type_dict[replace_type]
 
-    def change_highlight_default(self, event, widget):
-        widget.config(background=self.default_color)
-
-    def change_highlight_sel(self, event, widget):
-        widget.config(background=self.sel_click_color)
-
-    def change_highlight_up(self, event, widget):
-        widget.config(background=self.up_click_color)
-
-    def change_highlight_down(self, event, widget):
-        widget.config(background=self.down_click_color)
-
-    def change_highlight_neg(self, event, widget):
-        widget.config(background=self.neg_click_color)
+    # def change_highlight_default(self, event, widget):
+    #     widget.config(background=self.default_color)
+    #
+    # def change_highlight_sel(self, event, widget):
+    #     widget.config(background=self.sel_click_color)
+    #
+    # def change_highlight_up(self, event, widget):
+    #     widget.config(background=self.up_click_color)
+    #
+    # def change_highlight_down(self, event, widget):
+    #     widget.config(background=self.down_click_color)
+    #
+    # def change_highlight_neg(self, event, widget):
+    #     widget.config(background=self.neg_click_color)
 
     def clear_widget_holder(self):
+        # destroy whatever widget is being referenced currently in the widget_holder class variable
         utils.del_fn(self.widget_holder)
         self.widget_holder = None
 
@@ -121,6 +132,9 @@ class paraText(tk.Text):
     ### vvv
 
     def get_replace_type(self, tag):
+        # This function will get a tag's replace type (ie "_ISO_" or "_REP_").
+        # If it gets "_REP_" it will figure out if its a parent or child
+        # Finally it returns an informative string to search through the color dictionary
         tag1 = tag[0:5]
         if tag1 == self.isoFlag:
             return self.replace_types[0]
