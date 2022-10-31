@@ -249,6 +249,8 @@ class paraText(tk.Text):
             self.replace_text(event, chosen_text, target_tags[i])
 
     def change_sync_selection(self, event, attacker_tag):
+        # Cosmetic function for change sync to inform user how the sync option is being changed
+        # iso flags get a negative color return since those tags don't have a sync option
         type_flag = attacker_tag[0:5]
         if type_flag == self.isoFlag:
             self.change_highlight_neg(event, event.widget)
@@ -261,6 +263,8 @@ class paraText(tk.Text):
 
     def change_child_tag_sync_flag(self, oldtag, new_sync_flag, parent_tag):
         ## NOTE: This function changes the paratext memory as well as returning the new tag for convenience
+        # Deletes a given tag from the memory and adds a new tag over the previous tag's bounds but with the
+        # new tag name
         idx, old_sync, pattern = self.parse_child_rep_id(oldtag)
         newtag = self.child_rep_id(idx, new_sync_flag, pattern)
         print('old dict is ' + str(self.rep_replace_tags[parent_tag]))
@@ -272,15 +276,18 @@ class paraText(tk.Text):
         self.tag_add(newtag, bounds[0], bounds[1])
         return newtag
 
+    ### These two need to be combined into one function, very redundant
+    # Both just call the change_child_tag_sync_flag helper function to change the tagname, and then binds the
+    # respective functions to the tagnames (see setup_rep_bind_tag, its hard to explain quickly)
     def change_sync_to_false(self, event, target_tags, attacker_tag, parent_tag):
         new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncFalse, parent_tag)
         self.setup_rep_bind_tag(parent_tag)
         # self.setup_rep_bind_tag_attacker(new_attacker_tag, [new_attacker_tag], parent_tag)
-
     def change_sync_to_true(self, event, target_tags, attacker_tag, parent_tag):
         new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncTrue, parent_tag)
         # self.setup_rep_bind_tag_attacker(new_attacker_tag, target_tags, parent_tag)
         self.setup_rep_bind_tag(parent_tag)
+
 
     def change_sync(self, event, target_tags, attacker_tag, parent_tag):
         print('doing change sync')
@@ -349,6 +356,8 @@ class paraText(tk.Text):
         return r1, r2
 
     def gen_changing_typebox(self, event, attacker_tag):
+        ### This function can definitely be made a LOT simpler
+        # Function which creates a little box telling the user what they just changed the sync option to
         frame = ttk.Frame(self.master)
         r1, r2 = self.gen_changing_typebox_get_to_fro(attacker_tag)
         b1 = tk.Label(master=frame, text=r1[0], background=self.replace_type_dict[r1])
@@ -366,6 +375,12 @@ class paraText(tk.Text):
         self.after(500, self.clear_widget_holder)
 
     def setup_rep_bind_tag_attacker(self, attacker_tag, target_tags, parent_tag):
+        # Sets up all the binds for the "attacker_tag"
+        # Is given a list of "target_tags" which will be subject to replacement upon the actions associated with
+        # the binds (ie for an unsynced attacker_tag, the target_tags will just be [attacker_tag])
+        ##########################
+        # Binds the Button-2 event (right-clicking the text tagged with attacker_tag) to triggering gen_options (which
+        # creates the dropdown menu for selecting which text to replace with)
         self.tag_bind(attacker_tag,
                       '<Button-2>',
                       lambda e: self.gen_options(e,
@@ -374,26 +389,34 @@ class paraText(tk.Text):
                                                  attacker_tag
                                                  )
                       )
-        # I believe this might not be working because events with modifiers are superceded by events specified sans modifier
-        # ie, since button-2 is already tagged, shift-button-2 won't execute
+        # Binds shift-button-2 to create a box which tells the user what kind of sync change shift-button-1 will trigger
         self.tag_bind(attacker_tag,
                       '<Shift-Button-2>',
                       lambda e: self.gen_changing_typebox(e, attacker_tag)
                       )
+        # Binds shift-button-1 to change the sync option for the attacker_tag (changes the tagname and re-sets up all
+        # the actions)
         self.tag_bind(attacker_tag,
                       '<Shift-Button-1>',
                       lambda e: self.change_sync(e, target_tags, attacker_tag, parent_tag)
                       )
         sync_flag = self.parse_child_rep_id(attacker_tag)
         underline_color = self.get_replace_type_color(attacker_tag)
+        # This should probably be its own function - just sets up the text color and stuff to give visual indicator
+        # for what kind of sync type it is
         self.tag_config(attacker_tag,
                         underline=True,
                         underlinefg=underline_color,
                         foreground=utils.make_darker(underline_color)
                         )
+        # update_idletasks makes sure that tasks that aren't refreshed by default get refreshed to make sure everything
+        # changed appropriately (very much a safety net kind of function)
         self.update_idletasks()
 
     def setup_rep_bind_tag(self, parent_tag):
+        # Given the rep parent tag, finds all of its children, and calls setup_rep_bind_tag_attacker on each child
+        # with the appropriate target_tags
+        ########################################
         # attacker_tags are tags which we will bind replace commands upon
         attacker_tags = self.rep_replace_tags[parent_tag]
         # target_tags are the tags which will undergo text replacement if a command is executed
@@ -410,11 +433,14 @@ class paraText(tk.Text):
             self.setup_rep_bind_tag_attacker(attacker_tags[i], target_tags, parent_tag)
 
     def append_child_tags(self, parent_tag, child_tag):
+        # Adds a new child tag belonging to given parent
         if not parent_tag in self.rep_replace_tags:
             self.rep_replace_tags[parent_tag] = []
         utils.append_no_dup(child_tag, self.rep_replace_tags[parent_tag])
 
     def add_tag_rep(self, pattern, opt_list, sync=None):
+        # Searches through the text for the pattern, and sets up a rep parent / rep children tree for the particular
+        # pattern/option list
         parent_tag = self.parent_rep_id(pattern)
         synctag = self.interp_sync_arg(sync)
         self.append_options(parent_tag, opt_list)
