@@ -226,7 +226,21 @@ class paraText(tk.Text):
     ### vvv
 
     def append_options(self, tag, opt_list):
-        # Adds an option to the option list for the given tag
+
+        """ Appends the contents of the option list to the class variable's option list
+
+        Parameters
+                         (str) tag: The tag who's option list is about to get updated
+                                    ASSUMPTIONS: Must be a string
+                                           NOTE: tags not following paraText convention may brake the program
+            (list of str) opt_list: The list of options to append
+                                    ASSUMPTIONS: Must be a list of strings
+
+        Returns
+            None (in place modification only)
+
+        """
+
         if not tag in self.replace_tags:
             self.replace_tags[tag] = []
         for i in range(len(opt_list)):
