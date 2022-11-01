@@ -58,6 +58,24 @@ def ints_to_index(line_idx, char_idx):
     return str(line_idx) + '.' + str(char_idx)
 
 def add_to_idx(index, mod_int, add=True):
+
+    """ Add/subtracts an integer from the column position of a char index
+
+    Parameters
+        REQUIRED:
+              (str) index: The char index to modify
+                           ASSUMPTIONS: Must be a string
+                                        Must have the structure "(int).(int)"
+            (int) mod_int: The int to add to the column position
+                           ASSUMPTIONS: Must be a positive int
+        OPTIONAL:
+               (bool) add: Bool to control the sign of our added int
+
+    Returns
+            (str) new_idx: Modified char index
+
+    """
+
     line_idx, char_idx = index_to_ints(str(index))
     if add:
         new_char_idx = char_idx + mod_int
