@@ -155,6 +155,21 @@ class paraText(tk.Text):
         return self.repFlag + pattern
 
     def parse_child_rep_id(self, rep_id):
+        """ Takes a child rep id, and returns each of its encoded parameters
+
+        Parameters
+            (str) rep_id: The child rep_id to parse
+                          ASSUMPTIONS: Must be a string
+                                       Must be of the structure;
+                                          "_REP_()_CNT_()_SNC_()"
+                                          where "()" signifies encoded parameters
+
+        Returns
+            (str) return_id
+            (str) sync_arg
+            (str) pattern
+
+        """
         # Takes a rep child's tag, and returns its index, its sync option, and its surface pattern
         try:
             idx1 = len(self.repFlag)
