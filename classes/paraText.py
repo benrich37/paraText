@@ -165,9 +165,9 @@ class paraText(tk.Text):
                                           where "()" signifies encoded parameters
 
         Returns
-            (str) return_id
-            (str) sync_arg
-            (str) pattern
+            (str) return_id: The child id number
+             (str) sync_arg: "TRUE" or "FALSE"
+              (str) pattern: The surface text option
 
         """
         # Takes a rep child's tag, and returns its index, its sync option, and its surface pattern
