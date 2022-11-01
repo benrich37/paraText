@@ -35,6 +35,20 @@ def short_hex_to_dec(short_hex):
     return return_sum
 
 def index_to_ints(index):
+
+    """ Takes a char index, returns the line/column integers as ints
+
+    Parameters
+        (str) index:
+
+    Returns
+        (int) line_idx
+        (int) char_idx
+
+    :param index:
+    :return:
+    """
+
     split = index.index('.')
     line_idx = int(index[0:split])
     char_idx = int(index[split + 1:])
