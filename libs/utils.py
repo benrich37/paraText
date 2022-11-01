@@ -35,6 +35,20 @@ def short_hex_to_dec(short_hex):
     return return_sum
 
 def index_to_ints(index):
+
+    """ Takes a char index, returns the line/column integers as ints
+
+    Parameters
+           (str) index: The char index to parse into ints
+                        ASSUMPTIONS: Must be a string
+                                     Must have the structure "(int).(int)"
+
+    Returns
+        (int) line_idx: The index for the line
+        (int) char_idx: The index for the column
+
+    """
+
     split = index.index('.')
     line_idx = int(index[0:split])
     char_idx = int(index[split + 1:])
@@ -44,6 +58,24 @@ def ints_to_index(line_idx, char_idx):
     return str(line_idx) + '.' + str(char_idx)
 
 def add_to_idx(index, mod_int, add=True):
+
+    """ Add/subtracts an integer from the column position of a char index
+
+    Parameters
+        REQUIRED:
+              (str) index: The char index to modify
+                           ASSUMPTIONS: Must be a string
+                                        Must have the structure "(int).(int)"
+            (int) mod_int: The int to add to the column position
+                           ASSUMPTIONS: Must be a positive int
+        OPTIONAL:
+               (bool) add: Bool to control the sign of our added int
+
+    Returns
+            (str) new_idx: Modified char index
+
+    """
+
     line_idx, char_idx = index_to_ints(str(index))
     if add:
         new_char_idx = char_idx + mod_int
