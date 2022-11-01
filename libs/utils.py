@@ -39,14 +39,14 @@ def index_to_ints(index):
     """ Takes a char index, returns the line/column integers as ints
 
     Parameters
-        (str) index:
+           (str) index: The char index to parse into ints
+                        ASSUMPTIONS: Must be a string
+                                     Must have the structure "(int).(int)"
 
     Returns
-        (int) line_idx
-        (int) char_idx
+        (int) line_idx: The index for the line
+        (int) char_idx: The index for the column
 
-    :param index:
-    :return:
     """
 
     split = index.index('.')
