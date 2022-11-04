@@ -9,7 +9,9 @@ from classes import paraText
 class TestUtils(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        root = tk.Tk()
         ex = paraText.paraText()
+        root.mainloop()
 
     def testnothing(self):
         self.assertTrue(True)
