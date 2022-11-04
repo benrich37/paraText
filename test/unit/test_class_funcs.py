@@ -6,6 +6,8 @@ mainpath = os.path.join(os.path.dirname(__file__), '../../')
 sys.path.append(mainpath)
 from classes import paraText
 
+# Follow this https://stackoverflow.com/questions/4083796/how-do-i-run-unittest-on-a-tkinter-app
+
 class TestUtils(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
