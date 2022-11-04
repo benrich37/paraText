@@ -9,9 +9,13 @@ from classes import paraText
 class TestUtils(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        root = tk.Tk()
-        ex = paraText.paraText()
-        root.mainloop()
+        cls.ex = paraText.paraText()
+
+    def setUp(self):
+        self.root = tk.Tk()
+
+    def tearDown(self):
+        self.root.destroy()
 
     def testnothing(self):
         self.assertTrue(True)
