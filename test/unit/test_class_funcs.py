@@ -9,7 +9,7 @@ from classes import paraText
 class TestUtils(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        var = "test"
+        ex = paraText.paraText()
 
     def testnothing(self):
         self.assertTrue(True)
