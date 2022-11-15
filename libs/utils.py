@@ -34,11 +34,15 @@ def make_darker(hex_color, dark_fac=2):
     return "#" + hex_f[0] + hex_f[1] + hex_f[2]
 
 def get_short_hex(num):
+    # the built in hex function for some reason has a '0x' at the beginning of the string
+    # (ie hex(1) returns '0x1' and hex(255) returns '0xff') so this truncates off the
+    # '0x' to get just the actual hex number (ie '1' or 'ff')
     full_hex = str(hex(math.floor(num)))
     short_hex = full_hex[full_hex.index('x') + 1:]
     return short_hex
 
 def short_hex_to_dec(short_hex):
+    # converts a number in hex to its respective number in base 10
     digs = len(short_hex)
     return_sum = 0
     for i in range(digs):
@@ -47,6 +51,7 @@ def short_hex_to_dec(short_hex):
     return return_sum
 
 def index_to_ints(index):
+    # converts a char idx (line number,character number) into invidiual ints from each part
     split = index.index('.')
     line_idx = int(index[0:split])
     char_idx = int(index[split + 1:])
