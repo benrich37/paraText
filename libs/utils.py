@@ -3,11 +3,10 @@ import math
 hex_chars = "0123456789ABCDEF"
 
 def make_darker(hex_color, dark_fac=2):
-    """
-
+    """ Function which decreases intensity of each color channel to make dark
     :param hex_color: A string signifying a hex color (#RRGGBB, where RR/GG/BB hold 0 -> 256 in base 16)
-    :param dark_fac:
-    :return:
+    :param dark_fac: Factor to decrease each color channel by (ie for dark_fac=2, #101010 turns into #050505")
+    :return new_hex_color: String for new hex color
     """
     if hex_color[0] != "#":
         # if it doesn't start with # it's probably not a hex color string
@@ -31,9 +30,14 @@ def make_darker(hex_color, dark_fac=2):
         for de in dec_f:
             # convert back to base 16
             hex_f.append(get_short_hex(de))
-    return "#" + hex_f[0] + hex_f[1] + hex_f[2]
+    new_hex_color = "#" + hex_f[0] + hex_f[1] + hex_f[2]
+    return new_hex_color
 
 def get_short_hex(num):
+    """
+    :param num: a number in base 10
+    :return short_hex: a cleaned up number in base 16
+    """
     # the built in hex function for some reason has a '0x' at the beginning of the string
     # (ie hex(1) returns '0x1' and hex(255) returns '0xff') so this truncates off the
     # '0x' to get just the actual hex number (ie '1' or 'ff')
@@ -42,6 +46,10 @@ def get_short_hex(num):
     return short_hex
 
 def short_hex_to_dec(short_hex):
+    """
+    :param short_hex: A number in base 16
+    :return return_sum: The same number in base 10
+    """
     # converts a number in hex to its respective number in base 10
     digs = len(short_hex)
     return_sum = 0
@@ -51,6 +59,10 @@ def short_hex_to_dec(short_hex):
     return return_sum
 
 def char_idx_to_ints(char_idx):
+    """
+    :param char_idx: A character index string
+    :return line_idx, col_idx: The integers contained in the char_idx
+    """
     # converts a char idx (line number,character number) into invidiual ints from each part
     split = char_idx.index('.')
     line_idx = int(char_idx[0:split])
@@ -58,11 +70,24 @@ def char_idx_to_ints(char_idx):
     return line_idx, col_idx
 
 def ints_to_char_idx(line_idx, col_idx):
+    """
+    :param line_idx: Int for line number
+    :param col_idx: Int for column number
+    :return char_idx: Respective char index string
+    """
     # just mushes them back together a string for use with tkinter
-    return str(line_idx) + '.' + str(col_idx)
+    char_idx = str(line_idx) + '.' + str(col_idx)
+    return char_idx
 
 def add_to_char_idx(char_idx, mod_int, add=True):
-    # I don't know why I wrote it like this, but this function just converts
+    """
+    :param char_idx: String for character index
+    :param mod_int:
+    :param add:
+    :return:
+    """
+    # I don't know why I wrote it like this, but this function just adds/subtracts a number from the col idx
+    # of a char idx
     line_idx, col_idx = char_idx_to_ints(str(char_idx))
     if add:
         new_col_idx = col_idx + mod_int
@@ -72,9 +97,21 @@ def add_to_char_idx(char_idx, mod_int, add=True):
     return new_char_idx
 
 def del_fn(widg):
+    """ Simple function that we can call easily instead of having to construct a bunch of
+    lambda functions
+
+    :param widg: The widget we wish to delete
+    :return None:
+    """
     widg.destroy()
 
 def return_matches(twidget, pattern):
+    """
+    :param twidget: Text-containing widget we wish to search through
+    :param pattern: Text-pattern we wish to search for
+    :return results: A list of char indices where each element is either the beginning
+                       or ending char index of where the pattern appears
+    """
     results = []
     over = False
     last_char_idx = '1.0'
@@ -88,12 +125,18 @@ def return_matches(twidget, pattern):
     return results
 
 def get_text_by_tagname(twidget, tagname):
+    """
+    :param twidget: Text-widget that (hopefully) has some text tagged by the tagname
+    :param tagname: The name of the tag we want to look for
+    :return current_text: The text currently under the tag
+    """
     bounds = twidget.tag_ranges(tagname)
     if len(bounds) > 2:
         print('only returning first tagged section')
-    return twidget.get(bounds[0], bounds[1])
+    current_text = twidget.get(bounds[0], bounds[1])
+    return current_text
 
-def insert_at_end(twidget, tagname, end_char_idx, insert_text):
+def insert_at_end(twidget, end_char_idx, insert_text):
     text_len = len(insert_text)
     insert_char_idx = add_to_char_idx(str(end_char_idx), 1, add=False)
     cut_text = twidget.get(insert_char_idx)
@@ -104,7 +147,7 @@ def insert_at_end(twidget, tagname, end_char_idx, insert_text):
 
 def insert(twidget, tagname, newtext):
     init_char_idx_bounds = twidget.tag_ranges(tagname)
-    insert_at_end(twidget, tagname, init_char_idx_bounds[1], newtext)
+    insert_at_end(twidget, init_char_idx_bounds[1], newtext)
     new_bounds = twidget.tag_ranges(tagname)
 
 def replace(twidget, tagname, newtext):
