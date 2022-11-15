@@ -401,7 +401,7 @@ class paraText(tk.Text):
                                            pattern)
             self.append_child_tags(parent_tag, ctag_i)
             bound1 = matches[i]
-            bound2 = utils.add_to_idx(matches[i], len(pattern))
+            bound2 = utils.add_to_char_idx(matches[i], len(pattern))
             self.tag_add(ctag_i,
                          bound1,
                          bound2

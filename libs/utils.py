@@ -50,24 +50,26 @@ def short_hex_to_dec(short_hex):
         return_sum += dig_dec
     return return_sum
 
-def index_to_ints(index):
+def char_idx_to_ints(char_idx):
     # converts a char idx (line number,character number) into invidiual ints from each part
-    split = index.index('.')
-    line_idx = int(index[0:split])
-    col_idx = int(index[split + 1:])
+    split = char_idx.index('.')
+    line_idx = int(char_idx[0:split])
+    col_idx = int(char_idx[split + 1:])
     return line_idx, col_idx
 
-def ints_to_index(line_idx, col_idx):
+def ints_to_char_idx(line_idx, col_idx):
+    # just mushes them back together a string for use with tkinter
     return str(line_idx) + '.' + str(col_idx)
 
-def add_to_idx(index, mod_int, add=True):
-    line_idx, col_idx = index_to_ints(str(index))
+def add_to_char_idx(char_idx, mod_int, add=True):
+    # I don't know why I wrote it like this, but this function just converts
+    line_idx, col_idx = char_idx_to_ints(str(char_idx))
     if add:
         new_col_idx = col_idx + mod_int
     else:
         new_col_idx = col_idx - mod_int
-    new_index = ints_to_index(line_idx, new_col_idx)
-    return new_index
+    new_char_idx = ints_to_char_idx(line_idx, new_col_idx)
+    return new_char_idx
 
 def del_fn(widg):
     widg.destroy()
@@ -75,13 +77,13 @@ def del_fn(widg):
 def return_matches(twidget, pattern):
     results = []
     over = False
-    last_idx = '1.0'
+    last_char_idx = '1.0'
     while not over:
-        resulti = twidget.search(pattern, last_idx, stopindex=twidget.index('end'))
+        resulti = twidget.search(pattern, last_char_idx, stopindex=twidget.index('end'))
         if len(resulti) == 0:
             over = True
         else:
-            last_idx = add_to_idx(resulti, 1)
+            last_char_idx = add_to_char_idx(resulti, 1)
             results.append(resulti)
     return results
 
@@ -91,27 +93,27 @@ def get_text_by_tagname(twidget, tagname):
         print('only returning first tagged section')
     return twidget.get(bounds[0], bounds[1])
 
-def insert_at_end(twidget, tagname, end_index, insert_text):
+def insert_at_end(twidget, tagname, end_char_idx, insert_text):
     text_len = len(insert_text)
-    insert_index = add_to_idx(str(end_index), 1, add=False)
-    cut_text = twidget.get(insert_index)
-    twidget.insert(insert_index, insert_text)
-    del_index = add_to_idx(str(end_index), text_len - 1, add=True)
-    twidget.delete(del_index)
-    twidget.insert(insert_index, cut_text)
+    insert_char_idx = add_to_char_idx(str(end_char_idx), 1, add=False)
+    cut_text = twidget.get(insert_char_idx)
+    twidget.insert(insert_char_idx, insert_text)
+    del_char_idx = add_to_char_idx(str(end_char_idx), text_len - 1, add=True)
+    twidget.delete(del_char_idx)
+    twidget.insert(insert_char_idx, cut_text)
 
 def insert(twidget, tagname, newtext):
-    init_bounds = twidget.tag_ranges(tagname)
-    insert_at_end(twidget, tagname, init_bounds[1], newtext)
+    init_char_idx_bounds = twidget.tag_ranges(tagname)
+    insert_at_end(twidget, tagname, init_char_idx_bounds[1], newtext)
     new_bounds = twidget.tag_ranges(tagname)
 
 def replace(twidget, tagname, newtext):
-    init_bounds = twidget.tag_ranges(tagname)
-    if len(init_bounds) > 2:
+    init_char_idx_bounds = twidget.tag_ranges(tagname)
+    if len(init_char_idx_bounds) > 2:
         print('too many matches, no replacements done')
         return None
     insert(twidget, tagname, newtext)
-    twidget.delete(init_bounds[0], init_bounds[1])
+    twidget.delete(init_char_idx_bounds[0], init_char_idx_bounds[1])
 
 def append_no_dup(item, list):
     if not item in list:
