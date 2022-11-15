@@ -137,6 +137,17 @@ def get_text_by_tagname(twidget, tagname):
     return current_text
 
 def insert_at_end(twidget, end_char_idx, insert_text):
+    """ This function just inserts a word at the end of a word and then deletes
+    the final character, ie if we want to insert 'Word' into 'Sentence', the
+    end result would be 'SentencWord' - By inserting within the word and THEN
+    deleting that last character, tkinter doesn't delete the existing tag
+
+
+    :param twidget: Text widget we're operating on
+    :param end_char_idx: char idx of where we're going to insert the new word
+    :param insert_text: Text we're inserting
+    :return None: (only in-place operations)
+    """
     text_len = len(insert_text)
     insert_char_idx = add_to_char_idx(str(end_char_idx), 1, add=False)
     cut_text = twidget.get(insert_char_idx)
@@ -148,7 +159,6 @@ def insert_at_end(twidget, end_char_idx, insert_text):
 def insert(twidget, tagname, newtext):
     init_char_idx_bounds = twidget.tag_ranges(tagname)
     insert_at_end(twidget, init_char_idx_bounds[1], newtext)
-    new_bounds = twidget.tag_ranges(tagname)
 
 def replace(twidget, tagname, newtext):
     init_char_idx_bounds = twidget.tag_ranges(tagname)
