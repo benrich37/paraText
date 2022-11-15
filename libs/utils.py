@@ -157,17 +157,38 @@ def insert_at_end(twidget, end_char_idx, insert_text):
     twidget.insert(insert_char_idx, cut_text)
 
 def insert(twidget, tagname, newtext):
+    """
+    :param twidget: Text widget we're operating on
+    :param tagname: tagname who's text selection we're inserting into
+    :param newtext: text we're inserting
+    :return None:
+    """
     init_char_idx_bounds = twidget.tag_ranges(tagname)
     insert_at_end(twidget, init_char_idx_bounds[1], newtext)
 
 def replace(twidget, tagname, newtext):
+    """
+    :param twidget: Text-widget we're operating on
+    :param tagname: tagname who's text we're replacing
+    :param newtext: Text we're replacing with
+    :return None:
+    """
     init_char_idx_bounds = twidget.tag_ranges(tagname)
     if len(init_char_idx_bounds) > 2:
+        # If this ever gets called, then the tagname convention has failed and it created
+        # the same child_rep_tag twice for separate children
         print('too many matches, no replacements done')
         return None
     insert(twidget, tagname, newtext)
     twidget.delete(init_char_idx_bounds[0], init_char_idx_bounds[1])
 
 def append_no_dup(item, list):
+    """
+    :param item: Item to add
+    :param list: List to add to
+    :return None: (in-place operations only)
+    """
+    # Simple function to add an item to a list iff its not already in the list
+    # (used most commonly for appending options)
     if not item in list:
         list.append(item)
