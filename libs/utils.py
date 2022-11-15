@@ -54,19 +54,19 @@ def index_to_ints(index):
     # converts a char idx (line number,character number) into invidiual ints from each part
     split = index.index('.')
     line_idx = int(index[0:split])
-    char_idx = int(index[split + 1:])
-    return line_idx, char_idx
+    col_idx = int(index[split + 1:])
+    return line_idx, col_idx
 
-def ints_to_index(line_idx, char_idx):
-    return str(line_idx) + '.' + str(char_idx)
+def ints_to_index(line_idx, col_idx):
+    return str(line_idx) + '.' + str(col_idx)
 
 def add_to_idx(index, mod_int, add=True):
-    line_idx, char_idx = index_to_ints(str(index))
+    line_idx, col_idx = index_to_ints(str(index))
     if add:
-        new_char_idx = char_idx + mod_int
+        new_col_idx = col_idx + mod_int
     else:
-        new_char_idx = char_idx - mod_int
-    new_index = ints_to_index(line_idx, new_char_idx)
+        new_col_idx = col_idx - mod_int
+    new_index = ints_to_index(line_idx, new_col_idx)
     return new_index
 
 def del_fn(widg):
