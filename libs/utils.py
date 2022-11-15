@@ -3,21 +3,33 @@ import math
 hex_chars = "0123456789ABCDEF"
 
 def make_darker(hex_color, dark_fac=2):
+    """
+
+    :param hex_color: A string signifying a hex color (#RRGGBB, where RR/GG/BB hold 0 -> 256 in base 16)
+    :param dark_fac:
+    :return:
+    """
     if hex_color[0] != "#":
+        # if it doesn't start with # it's probably not a hex color string
         raise ValueError
     else:
+        # split the channels into elements of a list
         hex_i = [hex_color[1:3],hex_color[3:5],hex_color[5:]]
         dec_i = []
         for he in hex_i:
+            # hold the channel values in base 10
             dec_i.append(int(short_hex_to_dec(he)))
         dec_changes = []
         for de in dec_i:
+            # decrease each color channel by half of the current channel value
             dec_changes.append(math.floor(de/dark_fac))
         dec_f = []
         for i in [0,1,2]:
+            # perform the subtraction
             dec_f.append(dec_i[i] - dec_changes[i])
         hex_f = []
         for de in dec_f:
+            # convert back to base 16
             hex_f.append(get_short_hex(de))
     return "#" + hex_f[0] + hex_f[1] + hex_f[2]
 
