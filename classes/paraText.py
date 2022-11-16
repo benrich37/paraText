@@ -152,10 +152,11 @@ class paraText(tk.Text):
 
     def parse_child_rep_tag(self, rep_tag):
         """
-        :param rep_tag: (str) child rep
-        :return return_id:
-        :return sync_arg:
-        :return pattern:
+        :param rep_tag: (str) child rep tag to parse
+        :return:
+        return_id (int) Child's ID;
+        sync_arg (str) Sync bool as string;
+        pattern (str) Governing pattern
         """
         try:
             idx1 = len(self.repFlag)
@@ -389,7 +390,6 @@ class paraText(tk.Text):
                       '<Shift-Button-1>',
                       lambda e: self.change_sync(e, target_tags, attacker_tag, parent_tag)
                       )
-        sync_flag = self.parse_child_rep_tag(attacker_tag)
         underline_color = self.get_replace_type_color(attacker_tag)
         self.tag_config(attacker_tag,
                         underline=True,
@@ -400,13 +400,11 @@ class paraText(tk.Text):
 
     def setup_rep_bind_tag(self, parent_tag):
         # attacker_tags are tags which we will bind replace commands upon
-        attacker_tags = self.rep_replace_tags[parent_tag]
         # target_tags are the tags which will undergo text replacement if a command is executed
-        target_tags = []
         # synced_tags indicate tags which are synced to each other
         # (all bound replace commands will replace all other synced tags)
+        attacker_tags = self.rep_replace_tags[parent_tag]
         syncd_tags = self.get_synced_tags(attacker_tags)
-
         for i in range(len(attacker_tags)):
             if attacker_tags[i] in syncd_tags:
                 target_tags = copy.deepcopy(syncd_tags)
