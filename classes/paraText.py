@@ -133,17 +133,15 @@ class paraText(tk.Text):
         else:
             raise ValueError("Unexpected tag")
 
-    def return_reptag_i(self, idx, sync, pattern):
-        return self.get_child_rep_tag(idx, sync, pattern)
-
     def get_child_rep_tag(self, idx, sync, pattern):
-        """ Concatenates the child rep tag
-        :param idx:
-        :param sync:
-        :param pattern:
-        :return:
+        """ Concatenates the child rep tag via given arguments and class variables
+        :param idx: (int) child ID to use
+        :param sync: (bool or str) True/False for whether its synced
+        :param pattern: (str) Pattern of parent tag
+        :return child_rep_tag: (str) String of constructed child rep tag
         """
-        return self.repFlag + str(idx) + self.repIdFlag + str(sync) + self.syncFlag + pattern
+        child_rep_tag = self.repFlag + str(idx) + self.repIdFlag + str(sync) + self.syncFlag + pattern
+        return child_rep_tag
 
     def get_parent_rep_tag(self, pattern):
         """
