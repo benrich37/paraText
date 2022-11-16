@@ -9,8 +9,8 @@ class paraText(tk.Text):
     repFlag = "_REP_"
     repIdFlag = "_CNT_"
     syncFlag = "_SNC_"
-    syncTrue = "TRUE"
-    syncFalse = "FALSE"
+    syncTrue = "True"
+    syncFalse = "False"
     isoFlag = "_ISO_"
 
     replace_sync_types = [
