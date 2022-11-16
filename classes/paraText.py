@@ -176,12 +176,17 @@ class paraText(tk.Text):
         return syncflag
 
     def get_last_rep_id(self, pattern):
+        """ Gets the ID of the most recently added child for a parent's pattern
+        :param pattern: String for parent's pattern
+        :return last_rep_id: Integer of most recently added child ID
+        """
         ids = []
         rep_ids = self.rep_replace_tags[self.parent_rep_id(pattern)]
         for id in rep_ids:
             id_i = self.parse_child_rep_id(id)[0]
             ids.append(id_i)
-        return max(ids)
+        last_rep_id = max(ids)
+        return last_rep_id
 
     def get_init_rep_id(self, pattern):
         """ Gets ID to use for adding a child
