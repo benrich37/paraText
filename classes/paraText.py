@@ -134,12 +134,18 @@ class paraText(tk.Text):
             raise ValueError("Unexpected tag")
 
     def return_reptag_i(self, idx, sync, pattern):
-        return self.child_rep_id(idx, sync, pattern)
+        return self.get_child_rep_tag(idx, sync, pattern)
 
-    def child_rep_id(self, idx, sync, pattern):
+    def get_child_rep_tag(self, idx, sync, pattern):
+        """ Concatenates the child rep tag
+        :param idx:
+        :param sync:
+        :param pattern:
+        :return:
+        """
         return self.repFlag + str(idx) + self.repIdFlag + str(sync) + self.syncFlag + pattern
 
-    def parent_rep_id(self, pattern):
+    def get_parent_rep_tag(self, pattern):
         """
         :param pattern: String of pattern parent rep id is for
         :return parent_rep_id: String of parent rep id to be used
@@ -181,7 +187,7 @@ class paraText(tk.Text):
         :return last_rep_id: Integer of most recently added child ID
         """
         ids = []
-        rep_ids = self.rep_replace_tags[self.parent_rep_id(pattern)]
+        rep_ids = self.rep_replace_tags[self.get_parent_rep_tag(pattern)]
         for id in rep_ids:
             id_i = self.parse_child_rep_id(id)[0]
             ids.append(id_i)
@@ -193,7 +199,7 @@ class paraText(tk.Text):
         :param pattern: String of pattern the parent tag is based on
         :return start_id: Integer of child ID to use for first appended child
         """
-        parent_tag = self.parent_rep_id(pattern)
+        parent_tag = self.get_parent_rep_tag(pattern)
         if not parent_tag in self.rep_replace_tags:
             start_id = 0
         else:
@@ -257,7 +263,7 @@ class paraText(tk.Text):
     def change_child_tag_sync_flag(self, oldtag, new_sync_flag, parent_tag):
         ## NOTE: This function changes the paratext memory as well as returning the new tag for convenience
         idx, old_sync, pattern = self.parse_child_rep_id(oldtag)
-        newtag = self.child_rep_id(idx, new_sync_flag, pattern)
+        newtag = self.get_child_rep_tag(idx, new_sync_flag, pattern)
         print('old dict is ' + str(self.rep_replace_tags[parent_tag]))
         place_in_list = self.rep_replace_tags[parent_tag].index(oldtag)
         self.rep_replace_tags[parent_tag][place_in_list] = newtag
@@ -410,15 +416,15 @@ class paraText(tk.Text):
         utils.append_no_dup(child_tag, self.rep_replace_tags[parent_tag])
 
     def add_tag_rep(self, pattern, opt_list, sync=None):
-        parent_tag = self.parent_rep_id(pattern)
+        parent_tag = self.get_parent_rep_tag(pattern)
         synctag = self.interp_sync_arg(sync)
         self.append_options(parent_tag, opt_list)
         matches = utils.return_matches(self, pattern)
         start_id = self.get_init_rep_id(pattern)
         for i in range(len(matches)):
-            ctag_i = self.child_rep_id(start_id + i,
-                                           synctag,
-                                           pattern)
+            ctag_i = self.get_child_rep_tag(start_id + i,
+                                            synctag,
+                                            pattern)
             self.append_child_tags(parent_tag, ctag_i)
             bound1 = matches[i]
             bound2 = utils.add_to_char_idx(matches[i], len(pattern))
