@@ -125,7 +125,7 @@ class paraText(tk.Text):
         if tag1 == self.isoFlag:
             return self.replace_types[0]
         elif tag1 == self.repFlag:
-            synctag = self.parse_child_rep_id(tag)[1]
+            synctag = self.parse_child_rep_tag(tag)[1]
             if synctag == self.syncTrue:
                 return self.replace_types[1]
             else:
@@ -150,22 +150,28 @@ class paraText(tk.Text):
         """
         return self.repFlag + pattern
 
-    def parse_child_rep_id(self, rep_id):
+    def parse_child_rep_tag(self, rep_tag):
+        """
+        :param rep_tag: (str) child rep
+        :return return_id:
+        :return sync_arg:
+        :return pattern:
+        """
         try:
             idx1 = len(self.repFlag)
-            idx2 = rep_id.index(self.repIdFlag)
-            return_id = int(rep_id[idx1:idx2])
+            idx2 = rep_tag.index(self.repIdFlag)
+            return_id = int(rep_tag[idx1:idx2])
         except Exception as e:
             print(e)
             sys.exit(1)
         try:
-            idx3 = rep_id.index(self.repIdFlag) + len(self.repIdFlag)
-            idx4 = rep_id.index(self.syncFlag)
-            sync_arg = rep_id[idx3:idx4]
+            idx3 = rep_tag.index(self.repIdFlag) + len(self.repIdFlag)
+            idx4 = rep_tag.index(self.syncFlag)
+            sync_arg = rep_tag[idx3:idx4]
         except Exception as e:
             print(e)
             sys.exit(1)
-        pattern = rep_id[idx4 + len(self.syncFlag):]
+        pattern = rep_tag[idx4 + len(self.syncFlag):]
         return return_id, sync_arg, pattern
 
     def interp_sync_arg(self, syncarg):
@@ -187,7 +193,7 @@ class paraText(tk.Text):
         ids = []
         rep_ids = self.rep_replace_tags[self.get_parent_rep_tag(pattern)]
         for id in rep_ids:
-            id_i = self.parse_child_rep_id(id)[0]
+            id_i = self.parse_child_rep_tag(id)[0]
             ids.append(id_i)
         last_rep_id = max(ids)
         return last_rep_id
@@ -226,7 +232,7 @@ class paraText(tk.Text):
     def get_synced_tags(self, given_tags):
         synced_tags = []
         for i in range(len(given_tags)):
-            sync_arg = self.parse_child_rep_id(given_tags[i])[1]
+            sync_arg = self.parse_child_rep_tag(given_tags[i])[1]
             if sync_arg == self.syncTrue:
                 synced_tags.append(given_tags[i])
         return synced_tags
@@ -252,7 +258,7 @@ class paraText(tk.Text):
         if type_flag == self.isoFlag:
             self.change_highlight_neg(event, event.widget)
         else:
-            sync_flag = self.parse_child_rep_id(attacker_tag)
+            sync_flag = self.parse_child_rep_tag(attacker_tag)
             if sync_flag == self.syncTrue:
                 self.change_highlight_down(event, event.widget)
             else:
@@ -260,7 +266,7 @@ class paraText(tk.Text):
 
     def change_child_tag_sync_flag(self, oldtag, new_sync_flag, parent_tag):
         ## NOTE: This function changes the paratext memory as well as returning the new tag for convenience
-        idx, old_sync, pattern = self.parse_child_rep_id(oldtag)
+        idx, old_sync, pattern = self.parse_child_rep_tag(oldtag)
         newtag = self.get_child_rep_tag(idx, new_sync_flag, pattern)
         print('old dict is ' + str(self.rep_replace_tags[parent_tag]))
         place_in_list = self.rep_replace_tags[parent_tag].index(oldtag)
@@ -288,7 +294,7 @@ class paraText(tk.Text):
         if type_flag == self.isoFlag:
             self.focus_set()
         else:
-            sync_flag = self.parse_child_rep_id(attacker_tag)[1]
+            sync_flag = self.parse_child_rep_tag(attacker_tag)[1]
             if sync_flag == self.syncTrue:
                 self.change_sync_to_false(event, target_tags, attacker_tag, parent_tag)
             else:
@@ -332,7 +338,7 @@ class paraText(tk.Text):
             r1 = self.replace_types[0]
             r2 = self.replace_types[0]
         elif type_flag == self.repFlag:
-            sval = self.parse_child_rep_id(attacker_tag)[1]
+            sval = self.parse_child_rep_tag(attacker_tag)[1]
             if sval == self.syncTrue:
                 r1 = self.replace_types[1]
                 r2 = self.replace_types[2]
@@ -383,7 +389,7 @@ class paraText(tk.Text):
                       '<Shift-Button-1>',
                       lambda e: self.change_sync(e, target_tags, attacker_tag, parent_tag)
                       )
-        sync_flag = self.parse_child_rep_id(attacker_tag)
+        sync_flag = self.parse_child_rep_tag(attacker_tag)
         underline_color = self.get_replace_type_color(attacker_tag)
         self.tag_config(attacker_tag,
                         underline=True,
