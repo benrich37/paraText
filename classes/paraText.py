@@ -140,6 +140,10 @@ class paraText(tk.Text):
         return self.repFlag + str(idx) + self.repIdFlag + str(sync) + self.syncFlag + pattern
 
     def parent_rep_id(self, pattern):
+        """
+        :param pattern: String of pattern parent rep id is for
+        :return parent_rep_id: String of parent rep id to be used
+        """
         return self.repFlag + pattern
 
     def parse_child_rep_id(self, rep_id):
@@ -161,6 +165,10 @@ class paraText(tk.Text):
         return return_id, sync_arg, pattern
 
     def interp_sync_arg(self, syncarg):
+        """
+        :param syncarg: Boolean for if we're syncing or not
+        :return syncflag: String to be used as tag for interpreting syncing
+        """
         if syncarg is None:
             syncflag = self.default_sync
         else:
@@ -194,6 +202,11 @@ class paraText(tk.Text):
     ### vvv
 
     def append_options(self, tag, opt_list):
+        """ Handler for adding options to a parent tag or iso tag
+        :param tag: String of tag
+        :param opt_list: List of strings to be added to the tags option list
+        :return None:
+        """
         if not tag in self.replace_tags:
             self.replace_tags[tag] = []
         for i in range(len(opt_list)):
