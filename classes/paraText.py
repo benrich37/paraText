@@ -178,19 +178,21 @@ class paraText(tk.Text):
     def get_last_rep_id(self, pattern):
         ids = []
         rep_ids = self.rep_replace_tags[self.parent_rep_id(pattern)]
-        for i in rep_ids:
-            id_i = self.parse_child_rep_id(rep_ids[i])[0]
+        for id in rep_ids:
+            id_i = self.parse_child_rep_id(id)[0]
             ids.append(id_i)
         return max(ids)
 
     def get_init_rep_id(self, pattern):
-        start_id = None
+        """ Gets ID to use for adding a child
+        :param pattern: String of pattern the parent tag is based on
+        :return start_id: Integer of child ID to use for first appended child
+        """
         parent_tag = self.parent_rep_id(pattern)
-        # if len(self.rep_replace_tags[self.parent_rep_id(pattern)]) == 0:
         if not parent_tag in self.rep_replace_tags:
             start_id = 0
         else:
-            start_id = self.get_last_rep_id(pattern)
+            start_id = self.get_last_rep_id(pattern) + 1
         return start_id
 
     ###
