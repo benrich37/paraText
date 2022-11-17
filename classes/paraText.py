@@ -88,6 +88,7 @@ class paraText(tk.Text):
         widget.config(background=self.neg_click_color)
 
     def clear_widget_holder(self):
+        print('clearing widget holder')
         utils.del_fn(self.widget_holder)
         self.widget_holder = None
 
@@ -269,10 +270,10 @@ class paraText(tk.Text):
         ## NOTE: This function changes the paratext memory as well as returning the new tag for convenience
         idx, old_sync, pattern = self.parse_child_rep_tag(oldtag)
         newtag = self.get_child_rep_tag(idx, new_sync_flag, pattern)
-        print('old dict is ' + str(self.rep_replace_tags[parent_tag]))
+        # print('old dict is ' + str(self.rep_replace_tags[parent_tag]))
         place_in_list = self.rep_replace_tags[parent_tag].index(oldtag)
         self.rep_replace_tags[parent_tag][place_in_list] = newtag
-        print('new dict is ' + str(self.rep_replace_tags[parent_tag]))
+        # print('new dict is ' + str(self.rep_replace_tags[parent_tag]))
         bounds = self.tag_ranges(oldtag)
         self.tag_delete(oldtag)
         self.tag_add(newtag, bounds[0], bounds[1])
@@ -289,7 +290,7 @@ class paraText(tk.Text):
         self.setup_rep_bind_tag(parent_tag)
 
     def change_sync(self, event, target_tags, attacker_tag, parent_tag):
-        print('doing change sync')
+        # print('doing change sync')
         self.gen_changing_typebox(event, attacker_tag)
         type_flag = attacker_tag[0:5]
         if type_flag == self.isoFlag:
@@ -316,6 +317,7 @@ class paraText(tk.Text):
         return type_box
 
     def gen_options(self, event, parent_tag, target_tags, attacker_tag):
+        # print('generating options')
         opt_list = self.replace_tags[parent_tag]
         frame = ttk.Frame(self.master)
         opt_boxes = []
@@ -413,6 +415,7 @@ class paraText(tk.Text):
             self.setup_rep_bind_tag_attacker(attacker_tags[i], target_tags, parent_tag)
 
     def append_child_tags(self, parent_tag, child_tag):
+        # print('appendibng child tags')
         if not parent_tag in self.rep_replace_tags:
             self.rep_replace_tags[parent_tag] = []
         utils.append_no_dup(child_tag, self.rep_replace_tags[parent_tag])
