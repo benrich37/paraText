@@ -7,8 +7,10 @@ mainpath = os.path.join(os.path.dirname(__file__), '../../')
 sys.path.append(mainpath)
 from classes import paraText
 from libs import utils
+from libs import event_gen
 
 # Follow this https://stackoverflow.com/questions/4083796/how-do-i-run-unittest-on-a-tkinter-app
+
 
 class TKinterTestCase(unittest.TestCase):
     """These methods are going to be the same for every GUI test,
@@ -100,7 +102,11 @@ class TestClassFuncs(TKinterTestCase):
         self.assertEqual(len(self.ex.rep_replace_tags[parent_tag]) - 1, self.ex.get_last_rep_id(pattern))
 
 
-    def test_setup_rep_bind_tag_attacker(self):
+    def test_setup_rep_bind_tag_attacker_old(self):
+        """
+        This test function is obviously too long, I'm just gonna go through and test
+        as much as possible than figure out how we can generalize it
+        """
         #### SETUP ####
 
         pattern = self.synonyms[0]
@@ -123,13 +129,14 @@ class TestClassFuncs(TKinterTestCase):
         attacker_tags = self.ex.rep_replace_tags[parent_tag]
         attacker_tag = attacker_tags[0]
         ####
-        # Make sure the most recently added widget is the paraText widget itself
-        self.assertEqual(self.root.winfo_children()[-1].winfo_class(), self.ex.winfo_class())
+
         self.ex.setup_rep_bind_tag_attacker(attacker_tag, attacker_tag, parent_tag)
         self.ex.update_idletasks()
         # get coordinates of where this was created
         bounds = self.ex.tag_ranges(attacker_tag)
         coords = self.ex.bbox(bounds[0])
+        # Make sure the most recently added widget is the paraText widget itself
+        self.assertEqual(self.root.winfo_children()[-1].winfo_class(), self.ex.winfo_class())
         # ESSENTIAL!!! There must be motion event on text with bound events before they can trigger
         self.ex.event_generate('<Motion>', x=coords[0], y=coords[1])
         self.ex.event_generate('<Button-2>', x=coords[0], y=coords[1])
@@ -137,6 +144,69 @@ class TestClassFuncs(TKinterTestCase):
         option_list = self.root.winfo_children()[1]
         # Most recently created widget should be a TFrame
         self.assertEqual(option_list.winfo_class(), 'TFrame')
+        options = option_list.winfo_children()
+        # The frame should have each option as a child, along with an indicator box
+        # telling the user the sync state of the child rep clicked (created by gen_typebox)
+        self.assertEqual(len(options), len(opt_list) + 1)
+
+
+    def test_setup_rep_bind_tag_attacker_clean(self):
+        """
+        This test function is obviously too long, I'm just gonna go through and test
+        as much as possible than figure out how we can generalize it
+        """
+        #### SETUP ####
+
+        pattern = self.synonyms[0]
+        opt_list = self.synonyms
+        parent_tag = self.ex.get_parent_rep_tag(pattern)
+        synctag = "True"
+        self.ex.append_options(parent_tag, opt_list)
+        matches = utils.return_matches(self.ex, pattern)
+        for i in range(len(matches)):
+            ctag_i = self.ex.get_child_rep_tag(0 + i,
+                                            synctag,
+                                            pattern)
+            self.ex.append_child_tags(parent_tag, ctag_i)
+            bound1 = matches[i]
+            bound2 = utils.add_to_char_idx(matches[i], len(pattern))
+            self.ex.tag_add(ctag_i,
+                         bound1,
+                         bound2
+                         )
+        attacker_tags = self.ex.rep_replace_tags[parent_tag]
+        attacker_tag = attacker_tags[0]
+        ####
+
+
+        self.ex.setup_rep_bind_tag(parent_tag)
+        self.ex.update_idletasks()
+        for t in attacker_tags:
+            # test text cosmetics
+
+            self.assertEqual(len(self.root.winfo_children()), 1)
+            self.assertEqual(self.root.winfo_children()[-1].winfo_class(),
+                             self.ex.winfo_class())
+            char_idx = self.ex.tag_ranges(t)[0]
+            event_gen.click_char(self.ex, char_idx, event_gen.right_click_coord)
+            self.assertEqual(len(self.root.winfo_children()), 2)
+            option_list = self.root.winfo_children()[1]
+            self.assertEqual(option_list.winfo_class(), 'TFrame')
+            ## Stuff
+            ## End Stuff
+            option_list.destroy()
+
+    def test_gen_options(self):
+        pattern = self.synonyms[0]
+        opt_list = self.synonyms
+        parent_tag = self.ex.get_parent_rep_tag(pattern)
+        self.ex.add_tag_rep(pattern, opt_list)
+
+
+
+
+
+
 
 
 
