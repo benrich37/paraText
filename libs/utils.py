@@ -4,8 +4,8 @@ hex_chars = "0123456789ABCDEF"
 
 def make_darker(hex_color, dark_fac=2):
     """ Function which decreases intensity of each color channel to make dark
-    :param (str) hex_color: A string signifying a hex color (#RRGGBB, where RR/GG/BB hold 0 -> 256 in base 16)
-    :param (float) dark_fac: Factor to decrease each color channel by (ie for dark_fac=2, #101010 turns into #050505")
+    :param      (str) hex_color: A string signifying a hex color (#RRGGBB, where RR/GG/BB hold 0 -> 256 in base 16)
+    :param     (float) dark_fac: Factor to decrease each color channel by (ie for dark_fac=2, #101010 turns into #050505")
     :return (str) new_hex_color: String for new hex color
     """
     if hex_color[0] != "#":
