@@ -158,10 +158,10 @@ def insert_at_end(twidget, end_char_idx, insert_text):
 
 def insert(twidget, tagname, newtext):
     """
-    :param twidget: Text widget we're operating on
-    :param tagname: tagname who's text selection we're inserting into
-    :param newtext: text we're inserting
-    :return   None:
+    :param (Widget) twidget: Text widget we're operating on
+    :param    (str) tagname: tagname who's text selection we're inserting into
+    :param    (str) newtext: text we're inserting
+    :return            None:
     """
     init_char_idx_bounds = twidget.tag_ranges(tagname)
     insert_at_end(twidget, init_char_idx_bounds[1], newtext)
