@@ -4,9 +4,9 @@ hex_chars = "0123456789ABCDEF"
 
 def make_darker(hex_color, dark_fac=2):
     """ Function which decreases intensity of each color channel to make dark
-    :param hex_color: A string signifying a hex color (#RRGGBB, where RR/GG/BB hold 0 -> 256 in base 16)
-    :param dark_fac: Factor to decrease each color channel by (ie for dark_fac=2, #101010 turns into #050505")
-    :return new_hex_color: String for new hex color
+    :param (str) hex_color: A string signifying a hex color (#RRGGBB, where RR/GG/BB hold 0 -> 256 in base 16)
+    :param (float) dark_fac: Factor to decrease each color channel by (ie for dark_fac=2, #101010 turns into #050505")
+    :return (str) new_hex_color: String for new hex color
     """
     if hex_color[0] != "#":
         # if it doesn't start with # it's probably not a hex color string
@@ -35,8 +35,8 @@ def make_darker(hex_color, dark_fac=2):
 
 def get_short_hex(num):
     """
-    :param num: a number in base 10
-    :return short_hex: a cleaned up number in base 16
+    :param (float) num: a number in base 10
+    :return (str) short_hex: a cleaned up number in base 16
     """
     # the built in hex function for some reason has a '0x' at the beginning of the string
     # (ie hex(1) returns '0x1' and hex(255) returns '0xff') so this truncates off the
@@ -47,8 +47,8 @@ def get_short_hex(num):
 
 def short_hex_to_dec(short_hex):
     """
-    :param short_hex: A number in base 16
-    :return return_sum: The same number in base 10
+    :param (str) short_hex: A number in base 16
+    :return (int) return_sum: The same number in base 10
     """
     # converts a number in hex to its respective number in base 10
     digs = len(short_hex)
@@ -60,8 +60,8 @@ def short_hex_to_dec(short_hex):
 
 def char_idx_to_ints(char_idx):
     """
-    :param char_idx: A character index string
-    :return line_idx, col_idx: The integers contained in the char_idx
+    :param (str) char_idx: A character index string
+    :return (int) line_idx, (int) col_idx: The integers contained in the char_idx
     """
     # converts a char idx (line number,character number) into invidiual ints from each part
     split = char_idx.index('.')
@@ -71,9 +71,9 @@ def char_idx_to_ints(char_idx):
 
 def ints_to_char_idx(line_idx, col_idx):
     """
-    :param line_idx: Int for line number
-    :param col_idx: Int for column number
-    :return char_idx: Respective char index string
+    :param (int) line_idx: Int for line number
+    :param (int) col_idx: Int for column number
+    :return (str) char_idx: Respective char index string
     """
     # just mushes them back together a string for use with tkinter
     char_idx = str(line_idx) + '.' + str(col_idx)
@@ -81,10 +81,10 @@ def ints_to_char_idx(line_idx, col_idx):
 
 def add_to_char_idx(char_idx, mod_int, add=True):
     """
-    :param char_idx: String for character index
-    :param mod_int:
-    :param add:
-    :return:
+    :param (str) char_idx: String for character index
+    :param (int) mod_int:
+    :param (bool) add:
+    :return (str) new_char_idx:
     """
     # I don't know why I wrote it like this, but this function just adds/subtracts a number from the col idx
     # of a char idx
@@ -100,17 +100,17 @@ def del_fn(widg):
     """ Simple function that we can call easily instead of having to construct a bunch of
     lambda functions
 
-    :param widg: The widget we wish to delete
+    :param (Widget) widg: The widget we wish to delete
     :return None:
     """
     widg.destroy()
 
 def return_matches(twidget, pattern):
     """
-    :param twidget: Text-containing widget we wish to search through
-    :param pattern: Text-pattern we wish to search for
-    :return results: A list of char indices where each element is either the beginning
-                       or ending char index of where the pattern appears
+    :param (Widget) twidget: Text-containing widget we wish to search through
+    :param (Str) pattern: Text-pattern we wish to search for
+    :return (list of str) results: A list of char indices where each element is either the beginning
+                                    or ending char index of where the pattern appears
     """
     results = []
     over = False
@@ -126,9 +126,9 @@ def return_matches(twidget, pattern):
 
 def get_text_by_tagname(twidget, tagname):
     """
-    :param twidget: Text-widget that (hopefully) has some text tagged by the tagname
-    :param tagname: The name of the tag we want to look for
-    :return current_text: The text currently under the tag
+    :param (Widget) twidget: Text-widget that (hopefully) has some text tagged by the tagname
+    :param (str) tagname: The name of the tag we want to look for
+    :return (str) current_text: The text currently under the tag
     """
     bounds = twidget.tag_ranges(tagname)
     if len(bounds) > 2:
@@ -143,9 +143,9 @@ def insert_at_end(twidget, end_char_idx, insert_text):
     deleting that last character, tkinter doesn't delete the existing tag
 
 
-    :param twidget: Text widget we're operating on
-    :param end_char_idx: char idx of where we're going to insert the new word
-    :param insert_text: Text we're inserting
+    :param (Widget) twidget: Text widget we're operating on
+    :param (str) end_char_idx: char idx of where we're going to insert the new word
+    :param (str) insert_text: Text we're inserting
     :return None: (only in-place operations)
     """
     text_len = len(insert_text)
@@ -168,9 +168,9 @@ def insert(twidget, tagname, newtext):
 
 def replace(twidget, tagname, newtext):
     """
-    :param twidget: Text-widget we're operating on
-    :param tagname: tagname who's text we're replacing
-    :param newtext: Text we're replacing with
+    :param (Widget) twidget: Text-widget we're operating on
+    :param (str) tagname: tagname who's text we're replacing
+    :param (str) newtext: Text we're replacing with
     :return None:
     """
     init_char_idx_bounds = twidget.tag_ranges(tagname)
