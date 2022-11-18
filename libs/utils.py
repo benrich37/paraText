@@ -35,7 +35,7 @@ def make_darker(hex_color, dark_fac=2):
 
 def get_short_hex(num):
     """
-    :param (float) num: a number in base 10
+    :param      (float) num: a number in base 10
     :return (str) short_hex: a cleaned up number in base 16
     """
     # the built in hex function for some reason has a '0x' at the beginning of the string
@@ -47,7 +47,7 @@ def get_short_hex(num):
 
 def short_hex_to_dec(short_hex):
     """
-    :param (str) short_hex: A number in base 16
+    :param   (str) short_hex: A number in base 16
     :return (int) return_sum: The same number in base 10
     """
     # converts a number in hex to its respective number in base 10
@@ -60,7 +60,7 @@ def short_hex_to_dec(short_hex):
 
 def char_idx_to_ints(char_idx):
     """
-    :param (str) char_idx: A character index string
+    :param                 (str) char_idx: A character index string
     :return (int) line_idx, (int) col_idx: The integers contained in the char_idx
     """
     # converts a char idx (line number,character number) into invidiual ints from each part
@@ -71,8 +71,8 @@ def char_idx_to_ints(char_idx):
 
 def ints_to_char_idx(line_idx, col_idx):
     """
-    :param (int) line_idx: Int for line number
-    :param (int) col_idx: Int for column number
+    :param  (int) line_idx: Int for line number
+    :param   (int) col_idx: Int for column number
     :return (str) char_idx: Respective char index string
     """
     # just mushes them back together a string for use with tkinter
@@ -81,10 +81,10 @@ def ints_to_char_idx(line_idx, col_idx):
 
 def add_to_char_idx(char_idx, mod_int, add=True):
     """
-    :param (str) char_idx: String for character index
-    :param (int) mod_int:
-    :param (bool) add:
-    :return (str) new_char_idx:
+    :param      (str) char_idx: String for character index
+    :param       (int) mod_int: Integer to add/subtract to col idx
+    :param          (bool) add: True if adding
+    :return (str) new_char_idx: String of modified char idx
     """
     # I don't know why I wrote it like this, but this function just adds/subtracts a number from the col idx
     # of a char idx
@@ -101,14 +101,14 @@ def del_fn(widg):
     lambda functions
 
     :param (Widget) widg: The widget we wish to delete
-    :return None:
+    :return         None:
     """
     widg.destroy()
 
 def return_matches(twidget, pattern):
     """
-    :param (Widget) twidget: Text-containing widget we wish to search through
-    :param (Str) pattern: Text-pattern we wish to search for
+    :param       (Widget) twidget: Text-containing widget we wish to search through
+    :param          (Str) pattern: Text-pattern we wish to search for
     :return (list of str) results: A list of char indices where each element is either the beginning
                                     or ending char index of where the pattern appears
     """
@@ -126,8 +126,8 @@ def return_matches(twidget, pattern):
 
 def get_text_by_tagname(twidget, tagname):
     """
-    :param (Widget) twidget: Text-widget that (hopefully) has some text tagged by the tagname
-    :param (str) tagname: The name of the tag we want to look for
+    :param    (Widget) twidget: Text-widget that (hopefully) has some text tagged by the tagname
+    :param       (str) tagname: The name of the tag we want to look for
     :return (str) current_text: The text currently under the tag
     """
     bounds = twidget.tag_ranges(tagname)
@@ -143,10 +143,10 @@ def insert_at_end(twidget, end_char_idx, insert_text):
     deleting that last character, tkinter doesn't delete the existing tag
 
 
-    :param (Widget) twidget: Text widget we're operating on
+    :param   (Widget) twidget: Text widget we're operating on
     :param (str) end_char_idx: char idx of where we're going to insert the new word
-    :param (str) insert_text: Text we're inserting
-    :return None: (only in-place operations)
+    :param  (str) insert_text: Text we're inserting
+    :return              None: (only in-place operations)
     """
     text_len = len(insert_text)
     insert_char_idx = add_to_char_idx(str(end_char_idx), 1, add=False)
@@ -161,7 +161,7 @@ def insert(twidget, tagname, newtext):
     :param twidget: Text widget we're operating on
     :param tagname: tagname who's text selection we're inserting into
     :param newtext: text we're inserting
-    :return None:
+    :return   None:
     """
     init_char_idx_bounds = twidget.tag_ranges(tagname)
     insert_at_end(twidget, init_char_idx_bounds[1], newtext)
@@ -169,9 +169,9 @@ def insert(twidget, tagname, newtext):
 def replace(twidget, tagname, newtext):
     """
     :param (Widget) twidget: Text-widget we're operating on
-    :param (str) tagname: tagname who's text we're replacing
-    :param (str) newtext: Text we're replacing with
-    :return None:
+    :param    (str) tagname: tagname who's text we're replacing
+    :param    (str) newtext: Text we're replacing with
+    :return            None:
     """
     init_char_idx_bounds = twidget.tag_ranges(tagname)
     if len(init_char_idx_bounds) > 2:
@@ -184,8 +184,8 @@ def replace(twidget, tagname, newtext):
 
 def append_no_dup(item, list):
     """
-    :param item: Item to add
-    :param list: List to add to
+    :param  item: Item to add
+    :param  list: List to add to
     :return None: (in-place operations only)
     """
     # Simple function to add an item to a list iff its not already in the list
