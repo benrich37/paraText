@@ -24,3 +24,13 @@ class TestUtils(unittest.TestCase):
         # negative test
         self.assertNotEqual(idx1, 4)
         self.assertNotEqual(idx2, 5)
+
+    def test_ints_to_char_idx(self):
+        expected = ('1.2')
+        test = u.ints_to_char_idx(1, 2)
+
+        # positive test
+        self.assertEqual(expected, test)
+        
+        # negative test
+        self.assertNotEqual('7.8', test)
