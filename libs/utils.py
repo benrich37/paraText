@@ -64,7 +64,7 @@ def char_idx_to_ints(char_idx):
     Parameters
     ----------
     char_idx: a character index string
-              character index string containing the line and column indexes.
+              character index string containing the line and column indexes
 
     Returns
     -------
@@ -82,10 +82,18 @@ def char_idx_to_ints(char_idx):
     return line_idx, col_idx
     
 def ints_to_char_idx(line_idx, col_idx):
-    """
-    :param  (int) line_idx: Int for line number
-    :param   (int) col_idx: Int for column number
-    :return (str) char_idx: Respective char index string
+    """Generates char_idx as a string
+    
+    Parameters
+    ----------
+    line_idx: int for line number
+    
+    col_idx: int for column number
+    
+    Returns
+    -------
+    char_idx
+        respective char index string
     """
     # just mushes them back together a string for use with tkinter
     char_idx = str(line_idx) + '.' + str(col_idx)
