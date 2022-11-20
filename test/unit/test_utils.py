@@ -34,3 +34,22 @@ class TestUtils(unittest.TestCase):
         
         # negative test
         self.assertNotEqual('7.8', test)
+
+    def test_add_to_char_idx(self):
+        # positive test for adding
+        expected_add = ('1.5')
+        test_add = u.add_to_char_idx('1.2', 3, add=True)
+        self.assertEqual(expected_add, test_add)
+        
+        # negative test for adding
+        self.assertNotEqual('1.2', test_add)
+        
+        # positive test for subtracting
+        expected_sub = ('1.1')
+        test_sub = u.add_to_char_idx('1.2', 1, add=False)
+        self.assertEqual(expected_sub, test_sub)
+        
+        # negative test for subtracting
+        self.assertNotEqual('1.2', test_sub)
+        
+
