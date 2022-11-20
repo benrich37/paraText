@@ -100,14 +100,22 @@ def ints_to_char_idx(line_idx, col_idx):
     return char_idx
 
 def add_to_char_idx(char_idx, mod_int, add=True):
+    """Add or remove a number from the col idx
+    
+    Parameters
+    ----------
+    char_idx: string for character index
+    
+    mod_int: integer to add or subtract from col idx
+    
+    add: bool
+         True if adding, False if subtracting
+    
+    Returns
+    -------
+    new_char_idx
+        string with modified char indx
     """
-    :param      (str) char_idx: String for character index
-    :param       (int) mod_int: Integer to add/subtract to col idx
-    :param          (bool) add: True if adding
-    :return (str) new_char_idx: String of modified char idx
-    """
-    # I don't know why I wrote it like this, but this function just adds/subtracts a number from the col idx
-    # of a char idx
     line_idx, col_idx = char_idx_to_ints(str(char_idx))
     if add:
         new_col_idx = col_idx + mod_int
