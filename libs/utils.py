@@ -59,16 +59,28 @@ def short_hex_to_dec(short_hex):
     return return_sum
 
 def char_idx_to_ints(char_idx):
-    """
-    :param                 (str) char_idx: A character index string
-    :return (int) line_idx, (int) col_idx: The integers contained in the char_idx
+    """Returns the integers in a char index string
+    
+    Parameters
+    ----------
+    char_idx: a character index string
+              character index string containing the line and column indexes.
+
+    Returns
+    -------
+    line_idx
+        integer contained in first position of char_idx
+    
+    col_idx
+        integer contained in the second position of char_idx
     """
     # converts a char idx (line number,character number) into invidiual ints from each part
+    
     split = char_idx.index('.')
     line_idx = int(char_idx[0:split])
     col_idx = int(char_idx[split + 1:])
     return line_idx, col_idx
-
+    
 def ints_to_char_idx(line_idx, col_idx):
     """
     :param  (int) line_idx: Int for line number
