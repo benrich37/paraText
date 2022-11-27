@@ -267,7 +267,6 @@ class paraText(tk.Text):
                 self.change_highlight_up(event, event.widget)
 
     def change_child_tag_sync_flag(self, oldtag, new_sync_flag, parent_tag):
-        ## NOTE: This function changes the paratext memory as well as returning the new tag for convenience
         idx, old_sync, pattern = self.parse_child_rep_tag(oldtag)
         newtag = self.get_child_rep_tag(idx, new_sync_flag, pattern)
         # print('old dict is ' + str(self.rep_replace_tags[parent_tag]))
@@ -277,17 +276,6 @@ class paraText(tk.Text):
         bounds = self.tag_ranges(oldtag)
         self.tag_delete(oldtag)
         self.tag_add(newtag, bounds[0], bounds[1])
-        return newtag
-
-    # def change_sync_to_false(self, event, target_tags, attacker_tag, parent_tag):
-    #     new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncFalse, parent_tag)
-    #     self.setup_rep_bind_tag(parent_tag)
-    #     # self.setup_rep_bind_tag_attacker(new_attacker_tag, [new_attacker_tag], parent_tag)
-    #
-    # def change_sync_to_true(self, event, target_tags, attacker_tag, parent_tag):
-    #     new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncTrue, parent_tag)
-    #     # self.setup_rep_bind_tag_attacker(new_attacker_tag, target_tags, parent_tag)
-    #     self.setup_rep_bind_tag(parent_tag)
 
     def change_sync(self, event, target_tags, attacker_tag, parent_tag):
         # print('doing change sync')
@@ -300,12 +288,8 @@ class paraText(tk.Text):
             print(sync_flag)
             new_sync_flag = utils.str_not(sync_flag)
             print(new_sync_flag)
-            new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, new_sync_flag, parent_tag)
+            self.change_child_tag_sync_flag(attacker_tag, new_sync_flag, parent_tag)
             self.setup_rep_bind_tag(parent_tag)
-            # if sync_flag == self.syncTrue:
-            #     self.change_sync_to_false(event, target_tags, attacker_tag, parent_tag)
-            # else:
-            #     self.change_sync_to_true(event, target_tags, attacker_tag, parent_tag)
 
     def new_option(self, event, frame, parent_tag, target_tags, opt_idx, attacker_tag):
         opt_list = self.replace_tags[parent_tag]
