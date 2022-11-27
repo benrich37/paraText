@@ -2,6 +2,14 @@ import math
 
 hex_chars = "0123456789ABCDEF"
 
+def str_not(string):
+    """ Function which can perform 'not(...)' on strings (because for some reason
+           bool(any non-empty string) -> True)
+    :param string: Either "True" or "False"
+    :return:
+    """
+    return not(string == "True")
+
 def make_darker(hex_color, dark_fac=2):
     """ Function which decreases intensity of each color channel to make dark
     :param      (str) hex_color: A string signifying a hex color (#RRGGBB, where RR/GG/BB hold 0 -> 256 in base 16)
