@@ -59,35 +59,63 @@ def short_hex_to_dec(short_hex):
     return return_sum
 
 def char_idx_to_ints(char_idx):
-    """
-    :param                 (str) char_idx: A character index string
-    :return (int) line_idx, (int) col_idx: The integers contained in the char_idx
+    """Returns the integers in a char index string
+    
+    Parameters
+    ----------
+    char_idx: a character index string
+              character index string containing the line and column indexes
+
+    Returns
+    -------
+    line_idx
+        integer contained in first position of char_idx
+    
+    col_idx
+        integer contained in the second position of char_idx
     """
     # converts a char idx (line number,character number) into invidiual ints from each part
+    
     split = char_idx.index('.')
     line_idx = int(char_idx[0:split])
     col_idx = int(char_idx[split + 1:])
     return line_idx, col_idx
-
+    
 def ints_to_char_idx(line_idx, col_idx):
-    """
-    :param  (int) line_idx: Int for line number
-    :param   (int) col_idx: Int for column number
-    :return (str) char_idx: Respective char index string
+    """Generates char_idx as a string
+    
+    Parameters
+    ----------
+    line_idx: int for line number
+    
+    col_idx: int for column number
+    
+    Returns
+    -------
+    char_idx
+        respective char index string
     """
     # just mushes them back together a string for use with tkinter
     char_idx = str(line_idx) + '.' + str(col_idx)
     return char_idx
 
 def add_to_char_idx(char_idx, mod_int, add=True):
+    """Add or remove a number from the col idx
+    
+    Parameters
+    ----------
+    char_idx: string for character index
+    
+    mod_int: integer to add or subtract from col idx
+    
+    add: bool
+         True if adding, False if subtracting
+    
+    Returns
+    -------
+    new_char_idx
+        string with modified char indx
     """
-    :param      (str) char_idx: String for character index
-    :param       (int) mod_int: Integer to add/subtract to col idx
-    :param          (bool) add: True if adding
-    :return (str) new_char_idx: String of modified char idx
-    """
-    # I don't know why I wrote it like this, but this function just adds/subtracts a number from the col idx
-    # of a char idx
     line_idx, col_idx = char_idx_to_ints(str(char_idx))
     if add:
         new_col_idx = col_idx + mod_int
