@@ -279,15 +279,15 @@ class paraText(tk.Text):
         self.tag_add(newtag, bounds[0], bounds[1])
         return newtag
 
-    def change_sync_to_false(self, event, target_tags, attacker_tag, parent_tag):
-        new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncFalse, parent_tag)
-        self.setup_rep_bind_tag(parent_tag)
-        # self.setup_rep_bind_tag_attacker(new_attacker_tag, [new_attacker_tag], parent_tag)
-
-    def change_sync_to_true(self, event, target_tags, attacker_tag, parent_tag):
-        new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncTrue, parent_tag)
-        # self.setup_rep_bind_tag_attacker(new_attacker_tag, target_tags, parent_tag)
-        self.setup_rep_bind_tag(parent_tag)
+    # def change_sync_to_false(self, event, target_tags, attacker_tag, parent_tag):
+    #     new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncFalse, parent_tag)
+    #     self.setup_rep_bind_tag(parent_tag)
+    #     # self.setup_rep_bind_tag_attacker(new_attacker_tag, [new_attacker_tag], parent_tag)
+    #
+    # def change_sync_to_true(self, event, target_tags, attacker_tag, parent_tag):
+    #     new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, self.syncTrue, parent_tag)
+    #     # self.setup_rep_bind_tag_attacker(new_attacker_tag, target_tags, parent_tag)
+    #     self.setup_rep_bind_tag(parent_tag)
 
     def change_sync(self, event, target_tags, attacker_tag, parent_tag):
         # print('doing change sync')
@@ -297,10 +297,15 @@ class paraText(tk.Text):
             self.focus_set()
         else:
             sync_flag = self.parse_child_rep_tag(attacker_tag)[1]
-            if sync_flag == self.syncTrue:
-                self.change_sync_to_false(event, target_tags, attacker_tag, parent_tag)
-            else:
-                self.change_sync_to_true(event, target_tags, attacker_tag, parent_tag)
+            print(sync_flag)
+            new_sync_flag = utils.str_not(sync_flag)
+            print(new_sync_flag)
+            new_attacker_tag = self.change_child_tag_sync_flag(attacker_tag, new_sync_flag, parent_tag)
+            self.setup_rep_bind_tag(parent_tag)
+            # if sync_flag == self.syncTrue:
+            #     self.change_sync_to_false(event, target_tags, attacker_tag, parent_tag)
+            # else:
+            #     self.change_sync_to_true(event, target_tags, attacker_tag, parent_tag)
 
     def new_option(self, event, frame, parent_tag, target_tags, opt_idx, attacker_tag):
         opt_list = self.replace_tags[parent_tag]
@@ -413,6 +418,7 @@ class paraText(tk.Text):
             else:
                 target_tags = [attacker_tags[i]]
             self.setup_rep_bind_tag_attacker(attacker_tags[i], target_tags, parent_tag)
+        print(self.rep_replace_tags[parent_tag])
 
     def append_child_tags(self, parent_tag, child_tag):
         # print('appendibng child tags')
