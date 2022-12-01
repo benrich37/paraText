@@ -342,6 +342,13 @@ class paraText(tk.Text):
         return r1, r2
 
     def gen_changing_typebox_handler(self, event, attacker_tag):
+
+        """ Handler function to do the work for gen_changing_typebox
+        :param event: Event which triggered gen_changing_typebox
+        :param attacker_tag: Tag of selection which received triggering event
+        :return:
+        """
+
         frame = ttk.Frame(self.master)
         r1, r2 = self.gen_changing_typebox_get_to_fro(attacker_tag)
         b1 = tk.Label(master=frame, text=r1[0], background=self.replace_type_dict[r1])
@@ -358,6 +365,13 @@ class paraText(tk.Text):
         self.widget_holder = frame
 
     def gen_changing_typebox(self, event, attacker_tag):
+
+        """ Creates a box which tells the user info about changing the sync type
+        :param event: Event which triggered gen_changing_typebox
+        :param attacker_tag: Tag of selection which received triggering event
+        :return:
+        """
+
         self.gen_changing_typebox_handler(event, attacker_tag)
         self.after(500, self.clear_widget_holder)
 
@@ -370,8 +384,6 @@ class paraText(tk.Text):
                                                  attacker_tag
                                                  )
                       )
-        # I believe this might not be working because events with modifiers are superceded by events specified sans modifier
-        # ie, since button-2 is already tagged, shift-button-2 won't execute
         self.tag_bind(attacker_tag,
                       '<Shift-Button-2>',
                       lambda e: self.gen_changing_typebox(e, attacker_tag)
