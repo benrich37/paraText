@@ -60,6 +60,8 @@ class paraText(tk.Text):
         self.widget_holder = None
 
 
+
+
     ###
     ############
     #########################
@@ -91,27 +93,6 @@ class paraText(tk.Text):
         print('clearing widget holder')
         utils.del_fn(self.widget_holder)
         self.widget_holder = None
-
-    # This function is a lost cause, too many actions too quickly
-    # def fadeout_widget_holder(self):
-    #     children = self.widget_holder.winfo_children()
-    #     hex_colors = []
-    #     for child in children:
-    #         hex_colors.append(child["background"])
-    #     init_alphas = []
-    #     for hex_color in hex_colors:
-    #         init_alphas.append(utils.short_hex_alpha_to_dec_alpha(utils.get_hex_alpha(hex_color)))
-    #     init_alpha = max(init_alphas)
-    #     while init_alpha >= 0:
-    #         for i in range(len(children)):
-    #             print("doing nothing")
-    #         # for i, child in enumerate(children):
-    #         #     new_back = utils.set_hex_alpha(hex_colors[i], init_alpha)
-    #         #     child.config(background=new_back)
-    #         i -= 1
-    #         # Sleep some time to make the transition not immediate
-    #         time.sleep(0.05)
-    #     self.clear_widget_holder()
 
     ###
     ############
@@ -269,16 +250,13 @@ class paraText(tk.Text):
     def change_child_tag_sync_flag(self, oldtag, new_sync_flag, parent_tag):
         idx, old_sync, pattern = self.parse_child_rep_tag(oldtag)
         newtag = self.get_child_rep_tag(idx, new_sync_flag, pattern)
-        # print('old dict is ' + str(self.rep_replace_tags[parent_tag]))
         place_in_list = self.rep_replace_tags[parent_tag].index(oldtag)
         self.rep_replace_tags[parent_tag][place_in_list] = newtag
-        # print('new dict is ' + str(self.rep_replace_tags[parent_tag]))
         bounds = self.tag_ranges(oldtag)
         self.tag_delete(oldtag)
         self.tag_add(newtag, bounds[0], bounds[1])
 
     def change_sync(self, event, target_tags, attacker_tag, parent_tag):
-        # print('doing change sync')
         self.gen_changing_typebox(event, attacker_tag)
         type_flag = attacker_tag[0:5]
         if type_flag == self.isoFlag:
@@ -301,12 +279,25 @@ class paraText(tk.Text):
         return new_opt
 
     def gen_typebox(self, replace_type, frame):
+        """ Generates the box in the topleft of an option list to tell the user
+               what the sync type of the clicked selection currently is
+        :param replace_type (str): The string for what the sync currently is
+        :param     frame (Widget): The parent frame holding the typebox along with the options
+        :return:
+        """
         color = self.replace_type_dict[replace_type]
         type_box = tk.Label(master=frame, text=replace_type[0], background=color)
         return type_box
 
     def gen_options(self, event, parent_tag, target_tags, attacker_tag):
-        # print('generating options')
+        """
+        :param     (Event) event: Event which triggered the function
+                                     (A right click on some tagged text)
+        :param       (str) parent_tag: parent tagname of tagged selection
+        :param       (str) target_tags: tagnames of selections to be changed
+        :param       (str) attacker_tag: tagname of the selection clicked on
+        :returns: (action) Generates a list of clickable options to replace text within the document
+        """
         opt_list = self.replace_tags[parent_tag]
         frame = ttk.Frame(self.master)
         opt_boxes = []
@@ -321,10 +312,15 @@ class paraText(tk.Text):
         frame.focus_set()
         self.widget_holder = frame
         frame.bind('<FocusOut>', lambda e: self.clear_widget_holder())
-        # frame.bind('<FocusOut>', lambda e: utils.del_fn(e.widget))
         self.update_idletasks()
 
     def gen_changing_typebox_get_to_fro(self, attacker_tag):
+        """ Returns the current sync type and the sync type a sync change would
+              create
+        :param (str) attacker_tag: The attacker tag we are looking at
+        :return (str) r1: Current sync type
+        :return (str) r2: Upcoming sync type
+        """
         type_flag = attacker_tag[0:5]
         if type_flag == self.isoFlag:
             r1 = self.replace_types[0]
@@ -345,7 +341,7 @@ class paraText(tk.Text):
             sys.exit(1)
         return r1, r2
 
-    def gen_changing_typebox(self, event, attacker_tag):
+    def gen_changing_typebox_handler(self, event, attacker_tag):
         frame = ttk.Frame(self.master)
         r1, r2 = self.gen_changing_typebox_get_to_fro(attacker_tag)
         b1 = tk.Label(master=frame, text=r1[0], background=self.replace_type_dict[r1])
@@ -360,6 +356,9 @@ class paraText(tk.Text):
         frame.bind('<FocusOut>', lambda e: utils.del_fn(e.widget))
         self.update_idletasks()
         self.widget_holder = frame
+
+    def gen_changing_typebox(self, event, attacker_tag):
+        self.gen_changing_typebox_handler(event, attacker_tag)
         self.after(500, self.clear_widget_holder)
 
     def setup_rep_bind_tag_attacker(self, attacker_tag, target_tags, parent_tag):
@@ -402,7 +401,6 @@ class paraText(tk.Text):
             else:
                 target_tags = [attacker_tags[i]]
             self.setup_rep_bind_tag_attacker(attacker_tags[i], target_tags, parent_tag)
-        print(self.rep_replace_tags[parent_tag])
 
     def append_child_tags(self, parent_tag, child_tag):
         # print('appendibng child tags')
