@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import ttk
 import _tkinter
 import os
 import sys
@@ -11,6 +12,11 @@ from libs import event_gen
 
 # Follow this https://stackoverflow.com/questions/4083796/how-do-i-run-unittest-on-a-tkinter-app
 
+def save_items(root, e):
+    items = e.__dict__.items()
+    root.ex_event = tk.Event()
+    for item in items:
+        root.ex_event.__setattr__(item[0], item[1])
 
 class TKinterTestCase(unittest.TestCase):
     """These methods are going to be the same for every GUI test,
@@ -25,6 +31,10 @@ class TKinterTestCase(unittest.TestCase):
         self.ex.insert('1.0', 'I will be concise. I want to be concise. I hope to one day be concise. ')
         self.ex.grid(column=0, row=0, padx=5, pady=5)
         self.pump_events()
+
+        self.ex.bind('<Button-1>', lambda e: save_items(self, e))
+        event_gen.left_click_coord(self.ex, tuple([0,0,0,0]))
+        self.ex.unbind('<Button-1>')
 
     def tearDown(self):
         if self.root:
@@ -102,52 +112,52 @@ class TestClassFuncs(TKinterTestCase):
         self.assertEqual(len(self.ex.rep_replace_tags[parent_tag]) - 1, self.ex.get_last_rep_id(pattern))
 
 
-    def test_setup_rep_bind_tag_attacker_old(self):
-        """
-        This test function is obviously too long, I'm just gonna go through and test
-        as much as possible than figure out how we can generalize it
-        """
-        #### SETUP ####
-
-        pattern = self.synonyms[0]
-        opt_list = self.synonyms
-        parent_tag = self.ex.get_parent_rep_tag(pattern)
-        synctag = "True"
-        self.ex.append_options(parent_tag, opt_list)
-        matches = utils.return_matches(self.ex, pattern)
-        for i in range(len(matches)):
-            ctag_i = self.ex.get_child_rep_tag(0 + i,
-                                            synctag,
-                                            pattern)
-            self.ex.append_child_tags(parent_tag, ctag_i)
-            bound1 = matches[i]
-            bound2 = utils.add_to_char_idx(matches[i], len(pattern))
-            self.ex.tag_add(ctag_i,
-                         bound1,
-                         bound2
-                         )
-        attacker_tags = self.ex.rep_replace_tags[parent_tag]
-        attacker_tag = attacker_tags[0]
-        ####
-
-        self.ex.setup_rep_bind_tag_attacker(attacker_tag, attacker_tag, parent_tag)
-        self.ex.update_idletasks()
-        # get coordinates of where this was created
-        bounds = self.ex.tag_ranges(attacker_tag)
-        coords = self.ex.bbox(bounds[0])
-        # Make sure the most recently added widget is the paraText widget itself
-        self.assertEqual(self.root.winfo_children()[-1].winfo_class(), self.ex.winfo_class())
-        # ESSENTIAL!!! There must be motion event on text with bound events before they can trigger
-        self.ex.event_generate('<Motion>', x=coords[0], y=coords[1])
-        self.ex.event_generate('<Button-2>', x=coords[0], y=coords[1])
-        self.ex.event_generate('<ButtonRelease-2>', x=coords[0], y=coords[1])
-        option_list = self.root.winfo_children()[1]
-        # Most recently created widget should be a TFrame
-        self.assertEqual(option_list.winfo_class(), 'TFrame')
-        options = option_list.winfo_children()
-        # The frame should have each option as a child, along with an indicator box
-        # telling the user the sync state of the child rep clicked (created by gen_typebox)
-        self.assertEqual(len(options), len(opt_list) + 1)
+    # def test_setup_rep_bind_tag_attacker_old(self):
+    #     """
+    #     This test function is obviously too long, I'm just gonna go through and test
+    #     as much as possible than figure out how we can generalize it
+    #     """
+    #     #### SETUP ####
+    #
+    #     pattern = self.synonyms[0]
+    #     opt_list = self.synonyms
+    #     parent_tag = self.ex.get_parent_rep_tag(pattern)
+    #     synctag = "True"
+    #     self.ex.append_options(parent_tag, opt_list)
+    #     matches = utils.return_matches(self.ex, pattern)
+    #     for i in range(len(matches)):
+    #         ctag_i = self.ex.get_child_rep_tag(0 + i,
+    #                                         synctag,
+    #                                         pattern)
+    #         self.ex.append_child_tags(parent_tag, ctag_i)
+    #         bound1 = matches[i]
+    #         bound2 = utils.add_to_char_idx(matches[i], len(pattern))
+    #         self.ex.tag_add(ctag_i,
+    #                      bound1,
+    #                      bound2
+    #                      )
+    #     attacker_tags = self.ex.rep_replace_tags[parent_tag]
+    #     attacker_tag = attacker_tags[0]
+    #     ####
+    #
+    #     self.ex.setup_rep_bind_tag_attacker(attacker_tag, attacker_tag, parent_tag)
+    #     self.ex.update_idletasks()
+    #     # get coordinates of where this was created
+    #     bounds = self.ex.tag_ranges(attacker_tag)
+    #     coords = self.ex.bbox(bounds[0])
+    #     # Make sure the most recently added widget is the paraText widget itself
+    #     self.assertEqual(self.root.winfo_children()[-1].winfo_class(), self.ex.winfo_class())
+    #     # ESSENTIAL!!! There must be motion event on text with bound events before they can trigger
+    #     self.ex.event_generate('<Motion>', x=coords[0], y=coords[1])
+    #     self.ex.event_generate('<Button-2>', x=coords[0], y=coords[1])
+    #     self.ex.event_generate('<ButtonRelease-2>', x=coords[0], y=coords[1])
+    #     option_list = self.root.winfo_children()[1]
+    #     # Most recently created widget should be a TFrame
+    #     self.assertEqual(option_list.winfo_class(), 'TFrame')
+    #     options = option_list.winfo_children()
+    #     # The frame should have each option as a child, along with an indicator box
+    #     # telling the user the sync state of the child rep clicked (created by gen_typebox)
+    #     self.assertEqual(len(options), len(opt_list) + 1)
 
 
     def test_setup_rep_bind_tag_attacker_clean(self):
@@ -196,23 +206,65 @@ class TestClassFuncs(TKinterTestCase):
             ## End Stuff
             option_list.destroy()
 
+        # self.assertEqual(self.ex_event, "esrdfg")
+
+
+    """
+    Sample button click event saved in self.ex_event
+    """
     def test_gen_options(self):
         pattern = self.synonyms[0]
         opt_list = self.synonyms
         parent_tag = self.ex.get_parent_rep_tag(pattern)
         self.ex.add_tag_rep(pattern, opt_list)
 
+        self.assertEqual(self.root.winfo_children()[-1].winfo_class(), self.ex.winfo_class())
+        target_tags = self.ex.rep_replace_tags[parent_tag]
+        attacker_tag = self.ex.rep_replace_tags[parent_tag][0]
+        self.ex.gen_options(
+            # self.ex_event is defined in the class setup, so interpreters might have
+            # trouble recognizing its existence below
+            self.ex_event,
+            parent_tag,
+            target_tags,
+            attacker_tag,
+        )
+        option_list = self.root.winfo_children()[1]
+        self.assertEqual(option_list.winfo_class(), 'TFrame')
+        option_list_children = option_list.winfo_children()
+        option_list_typebox = option_list_children[-1]
+        self.assertEqual(option_list_typebox.cget('text'), self.ex.get_replace_type(attacker_tag)[0])
+        option_list_options = option_list_children[:-1]
+        self.assertEqual(len(opt_list), len(option_list_options))
+        for i in range(len(opt_list)):
+            self.assertEqual(opt_list[i], option_list_options[i].cget('text'))
+
+    def test_gen_typebox(self):
+        replace_types = self.ex.replace_types
+        ex_frame = ttk.Frame(self.ex.master)
+        for s in replace_types:
+            typebox = self.ex.gen_typebox(s, ex_frame)
+            self.assertEqual(typebox.cget('text'), s[0])
+            utils.del_fn(typebox)
+
+    def test_gen_changing_typebox_get_to_fro(self):
+        sample_iso = "_ISO_foobar"
+        sample_rep_s = "_REP_1_CNT_True_SNC_foobar"
+        sample_rep_u = "_REP_1_CNT_False_SNC_foobar"
+        sample_iso_ret = self.ex.gen_changing_typebox_get_to_fro(sample_iso)
+        sample_rep_s_ret = self.ex.gen_changing_typebox_get_to_fro(sample_rep_s)
+        sample_rep_u_ret = self.ex.gen_changing_typebox_get_to_fro(sample_rep_u)
+        self.assertEqual(sample_iso_ret[0], self.ex.replace_types[0])
+        self.assertEqual(sample_iso_ret[1], self.ex.replace_types[0])
+        self.assertEqual(sample_rep_s_ret[0], self.ex.replace_types[1])
+        self.assertEqual(sample_rep_s_ret[1], self.ex.replace_types[2])
+        self.assertEqual(sample_rep_u_ret[0], self.ex.replace_types[2])
+        self.assertEqual(sample_rep_u_ret[1], self.ex.replace_types[1])
+
+    # def test_gen_changing_typebox(self):
 
 
-
-
-
-
-
-
-
-
-    def test_Add_Tag_Rep(self):
+    def test_add_tag_rep(self):
         self.ex.add_tag_rep(self.synonyms[0], self.synonyms, sync=self.ex.syncTrue)
 
 if __name__ == '__main__':
