@@ -1,0 +1,48 @@
+name: Tests
+
+on:
+  push:
+      branches: [main]
+  pull_request:
+      branches: [main]
+
+jobs:
+  code_style:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: gtex
+          environment-file: environment.yml
+      - run: pycodestyle $(git ls-files "*.py")
+  
+  functional_tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: gtex
+          environment-file: environment.yml
+      - run: 
+
+  unit_tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: gtex
+          environment-file: environment.yml
+      - run: |
+          python -m unittest test_utils
