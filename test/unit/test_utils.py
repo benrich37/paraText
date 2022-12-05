@@ -5,14 +5,24 @@ sys.path.append("../../libs/")
 import utils as u
 
 class TestUtils(unittest.TestCase):
-#     @classmethod
-#     def setUpClass(cls):
-#         # create temporary data structures
     
-#     @classmethod
-#     def tearDownClass(cls):
-#         # kill temporary data structures
-    
+    def test_make_darker(self):
+        # test that string returned has been changed accordingly
+        hex_color = '#123456'
+        dark_fac = 2
+        expected_hex = '#91a2b'
+        test_hex = u.make_darker(hex_color, dark_fac)
+        
+        # positive test
+        self.assertEqual(test_hex, expected_hex)
+        
+        # negative test
+        self.assertNotEqual(test_hex, hex_color)
+        
+        # error handling: handles invalid hex code being parsed
+        # invalid code: doesn't start with #
+
+        
     def test_char_idx_to_ints(self):
         idxs = [1.2]
         idx1, idx2 = u.char_idx_to_ints('1.2')
@@ -51,5 +61,3 @@ class TestUtils(unittest.TestCase):
         
         # negative test for subtracting
         self.assertNotEqual('1.2', test_sub)
-        
-
