@@ -44,8 +44,10 @@ class TKinterTestCase(unittest.TestCase):
 
         self.sample_iso = "_ISO_foobar"
         self.sample_parent = "_REP_foobar"
-        self.sample_rep_s = "_REP_1_CNT_True_SNC_foobar"
-        self.sample_rep_u = "_REP_1_CNT_False_SNC_foobar"
+        self.sample_rep_s1 = "_REP_1_CNT_True_SNC_foobar"
+        self.sample_rep_u1 = "_REP_1_CNT_False_SNC_foobar"
+        self.sample_rep_s2 = "_REP_2_CNT_True_SNC_foobar"
+        self.sample_rep_u2 = "_REP_2_CNT_False_SNC_foobar"
 
     def tearDown(self):
         if self.root:
@@ -68,7 +70,7 @@ class TestClassFuncs(TKinterTestCase):
         self.assertEqual(len(self.ex.winfo_children()), 0)
 
     def test_get_replace_type(self):
-        sample_tags = [self.sample_iso, self.sample_rep_s, self.sample_rep_u]
+        sample_tags = [self.sample_iso, self.sample_rep_s1, self.sample_rep_u1]
         expected_returns = [self.ex.replace_types[0],
                             self.ex.replace_types[1],
                             self.ex.replace_types[2]]
@@ -107,21 +109,21 @@ class TestClassFuncs(TKinterTestCase):
 
     def test_get_synced_tags(self):
         self.assertEqual(self.ex.get_synced_tags([]), [])
-        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_s, self.sample_rep_s]),
-                             [self.sample_rep_s, self.sample_rep_s])
-        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_u, self.sample_rep_s]),
-                             [self.sample_rep_s])
-        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_s, self.sample_rep_u]),
-                             [self.sample_rep_s])
-        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_u, self.sample_rep_u]),
+        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_s1, self.sample_rep_s1]),
+                             [self.sample_rep_s1, self.sample_rep_s1])
+        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_u1, self.sample_rep_s1]),
+                             [self.sample_rep_s1])
+        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_s1, self.sample_rep_u1]),
+                             [self.sample_rep_s1])
+        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_u1, self.sample_rep_u1]),
                              [])
 
     def test_change_child_tag_sync_flag(self):
-        self.ex.tag_add(self.sample_rep_s, "1.0", "1.5")
-        self.ex.append_child_tags(self.sample_parent, self.sample_rep_s)
-        self.assertEqual(self.ex.rep_replace_tags[self.sample_parent][0], self.sample_rep_s)
-        self.ex.change_child_tag_sync_flag(self.sample_rep_s, self.ex.syncFalse, self.sample_parent)
-        self.assertEqual(self.ex.rep_replace_tags[self.sample_parent][0], self.sample_rep_u)
+        self.ex.tag_add(self.sample_rep_s1, "1.0", "1.5")
+        self.ex.append_child_tags(self.sample_parent, self.sample_rep_s1)
+        self.assertEqual(self.ex.rep_replace_tags[self.sample_parent][0], self.sample_rep_s1)
+        self.ex.change_child_tag_sync_flag(self.sample_rep_s1, self.ex.syncFalse, self.sample_parent)
+        self.assertEqual(self.ex.rep_replace_tags[self.sample_parent][0], self.sample_rep_u1)
 
 
     def test_append_options(self):
@@ -159,13 +161,13 @@ class TestClassFuncs(TKinterTestCase):
 
     def test_append_child_tags(self):
         self.assertRaises(KeyError, lambda: self.ex.rep_replace_tags[self.sample_parent])
-        self.ex.append_child_tags(self.sample_parent, self.sample_rep_s)
-        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_s])
-        self.ex.append_child_tags(self.sample_parent, self.sample_rep_s)
-        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_s])
-        self.ex.append_child_tags(self.sample_parent, self.sample_rep_u)
-        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_s,
-                                                                            self.sample_rep_u])
+        self.ex.append_child_tags(self.sample_parent, self.sample_rep_s1)
+        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_s1])
+        self.ex.append_child_tags(self.sample_parent, self.sample_rep_s1)
+        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_s1])
+        self.ex.append_child_tags(self.sample_parent, self.sample_rep_u1)
+        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_s1,
+                                                                            self.sample_rep_u1])
 
     def test_setup_rep_bind_tag_attacker(self):
         """
@@ -256,8 +258,8 @@ class TestClassFuncs(TKinterTestCase):
 
     def test_gen_changing_typebox_get_to_fro(self):
         sample_iso = self.sample_iso
-        sample_rep_s = self.sample_rep_s
-        sample_rep_u = self.sample_rep_u
+        sample_rep_s = self.sample_rep_s1
+        sample_rep_u = self.sample_rep_u1
         sample_iso_ret = self.ex.gen_changing_typebox_get_to_fro(sample_iso)
         sample_rep_s_ret = self.ex.gen_changing_typebox_get_to_fro(sample_rep_s)
         sample_rep_u_ret = self.ex.gen_changing_typebox_get_to_fro(sample_rep_u)
@@ -272,7 +274,7 @@ class TestClassFuncs(TKinterTestCase):
     # The handler is tested instead of the top-level function because unittest
     # gets confused with the tkinter "after" function
     def test_gen_changing_typebox_handler(self):
-        sample_tags = [self.sample_iso, self.sample_rep_s, self.sample_rep_u]
+        sample_tags = [self.sample_iso, self.sample_rep_s1, self.sample_rep_u1]
 
         for t in sample_tags:
             t_r1, t_r2 = self.ex.gen_changing_typebox_get_to_fro(t)
@@ -293,6 +295,24 @@ class TestClassFuncs(TKinterTestCase):
             self.assertEqual(typebox_children[2].cget('text'), t_r2[0])
             utils.del_fn(changing_typebox)
 
+    def test_change_sync_worker(self):
+        self.ex.append_child_tags(self.sample_parent, self.sample_rep_s1)
+        self.ex.append_child_tags(self.sample_parent, self.sample_rep_u2)
+        # self.ex.append_child_tags(self.sample_parent, self.sample_iso)
+        self.ex.tag_add(self.sample_rep_s1, '2.0', '2.10')
+        self.ex.tag_add(self.sample_rep_u2, '2.10', '2.20')
+        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_s1,
+                                                                            self.sample_rep_u2])
+        self.ex.change_sync_worker(self.sample_rep_s1, self.sample_parent)
+        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_u1,
+                                                                            self.sample_rep_u2])
+        self.ex.change_sync_worker(self.sample_rep_u2, self.sample_parent)
+        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_u1,
+                                                                            self.sample_rep_s2])
+        self.ex.change_sync_worker(self.sample_rep_s2, self.sample_parent)
+        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_u1,
+                                                                            self.sample_rep_u2])
+
     def test_replace_text(self):
         self.assertEqual(self.ex.get('2.0', 'end-1c'), self.sample_line)
         self.ex.replace_text("foo", self.sample_iso)
@@ -310,15 +330,15 @@ class TestClassFuncs(TKinterTestCase):
         self.ex.replace_texts('foo', [self.sample_iso])
         self.assertEqual(self.ex.get('2.0', 'end-1c'), self.sample_line)
         self.ex.tag_add(self.sample_iso, '2.0', '2.10')
-        self.ex.tag_add(self.sample_rep_s, '2.10', '2.20')
-        self.ex.tag_add(self.sample_rep_u, '2.20', 'end-1c')
+        self.ex.tag_add(self.sample_rep_s1, '2.10', '2.20')
+        self.ex.tag_add(self.sample_rep_u1, '2.20', 'end-1c')
         self.ex.replace_texts('foo', [self.sample_iso])
         self.assertEqual(self.ex.get('2.0', 'end-1c'), 'foo' + self.sample_line[10:])
-        self.ex.replace_texts('bar', [self.sample_iso, self.sample_rep_s])
+        self.ex.replace_texts('bar', [self.sample_iso, self.sample_rep_s1])
         self.assertEqual(self.ex.get('2.0', 'end-1c'), 'bar' + 'bar' + self.sample_line[20:])
-        self.ex.replace_texts('foo', [self.sample_iso, self.sample_rep_s, self.sample_rep_u])
+        self.ex.replace_texts('foo', [self.sample_iso, self.sample_rep_s1, self.sample_rep_u1])
         self.assertEqual(self.ex.get('2.0', 'end-1c'), 'foo' + 'foo' + 'foo')
-        self.ex.replace_texts('bar', [self.sample_iso, self.sample_rep_u])
+        self.ex.replace_texts('bar', [self.sample_iso, self.sample_rep_u1])
         self.assertEqual(self.ex.get('2.0', 'end-1c'), 'bar' + 'foo' + 'bar')
 
 
