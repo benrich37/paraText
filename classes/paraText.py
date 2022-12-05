@@ -248,6 +248,11 @@ class paraText(tk.Text):
         self.config(state=tk.DISABLED)
 
     def replace_texts(self, chosen_text, target_tags):
+        """
+        :param (str) chosen_text: Text which will replace whatever the target_tags' text currently are
+        :param (list of str) target_tags: Tagnames of children who's text we're replacing
+        :return:
+        """
         for i in range(len(target_tags)):
             self.replace_text(chosen_text, target_tags[i])
         self.focus_set()
