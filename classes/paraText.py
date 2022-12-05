@@ -287,7 +287,11 @@ class paraText(tk.Text):
 
 
     def change_sync_worker(self, attacker_tag, parent_tag):
-        type_flag = attacker_tag[0:5]
+        """
+        :param (str) attacker_tag: Tagname of child who's sync option we're changing
+        :param (str) parent_tag: Tagname of child's parent for updating the memory
+        :return:
+        """
         sync_flag = self.parse_child_rep_tag(attacker_tag)[1]
         new_sync_flag = utils.str_not(sync_flag)
         self.change_child_tag_sync_flag(attacker_tag, new_sync_flag, parent_tag)
