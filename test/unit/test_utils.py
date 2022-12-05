@@ -1,6 +1,7 @@
 import unittest
 import os
 import sys
+import random
 sys.path.append("../../libs/")
 import utils as u
 
@@ -23,7 +24,20 @@ class TestUtils(unittest.TestCase):
         # invalid code: doesn't start with #
         with self.assertRaises(ValueError):
             u.make_darker('12346', dark_fac)
+    
+    def test_get_short_hex(self):
+        # create data for tests
+        dec_value = random.randint(0,100)
+        hex_value = str(hex(dec_value))
+        short_hex = hex_value[hex_value.index('x') + 1:]
+        test_short_hex = u.get_short_hex(dec_value)
 
+        # positive test
+        self.assertEqual(test_short_hex, short_hex)
+        
+        # negative test
+        self.assertNotEqual(test_short_hex, hex(255))
+        
     def test_char_idx_to_ints(self):
         idxs = [1.2]
         idx1, idx2 = u.char_idx_to_ints('1.2')
