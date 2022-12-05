@@ -242,6 +242,8 @@ class paraText(tk.Text):
 
     def replace_text(self, event, chosen_text, target_i):
         self.replace_text_handler(chosen_text, target_i)
+        # This below is obviously dangerous, at some point we should put the widget's
+        # master in the widget holder incase the structure of this option menu changes
         utils.del_fn(event.widget.master)
 
     def replace_texts(self, event, chosen_text, target_tags):
@@ -260,6 +262,12 @@ class paraText(tk.Text):
                 self.change_highlight_up(event, event.widget)
 
     def change_child_tag_sync_flag(self, oldtag, new_sync_flag, parent_tag):
+        """
+        :param (str) oldtag: Child tag who's sync flag we're changing
+        :param (str) new_sync_flag: Sync flag we're inserting into oldtag
+        :param (str) parent_tag: Child's parent for re-tagging purposes
+        :return:
+        """
         idx, old_sync, pattern = self.parse_child_rep_tag(oldtag)
         newtag = self.get_child_rep_tag(idx, new_sync_flag, pattern)
         place_in_list = self.rep_replace_tags[parent_tag].index(oldtag)
