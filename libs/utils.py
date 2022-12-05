@@ -52,7 +52,7 @@ def make_darker(hex_color, dark_fac=2):
 
 
 def get_short_hex(num):
-    """Function to convert to hex remove '0x' from hex value
+    """Function to convert to hex and remove '0x' from hex value
 
     Parameters
     ----------
