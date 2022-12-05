@@ -9,6 +9,7 @@ sys.path.append(mainpath)
 from classes import paraText
 from libs import utils
 from libs import event_gen
+import time
 
 # Follow this https://stackoverflow.com/questions/4083796/how-do-i-run-unittest-on-a-tkinter-app
 
@@ -17,6 +18,7 @@ def save_items(root, e):
     root.ex_event = tk.Event()
     for item in items:
         root.ex_event.__setattr__(item[0], item[1])
+
 
 class TKinterTestCase(unittest.TestCase):
     """These methods are going to be the same for every GUI test,
@@ -36,6 +38,10 @@ class TKinterTestCase(unittest.TestCase):
         event_gen.left_click_coord(self.ex, tuple([0,0,0,0]))
         self.ex.unbind('<Button-1>')
 
+        self.sample_iso = "_ISO_foobar"
+        self.sample_rep_s = "_REP_1_CNT_True_SNC_foobar"
+        self.sample_rep_u = "_REP_1_CNT_False_SNC_foobar"
+
     def tearDown(self):
         if self.root:
             self.root.destroy()
@@ -48,6 +54,22 @@ class TKinterTestCase(unittest.TestCase):
 class TestClassFuncs(TKinterTestCase):
     def test_nothing(self):
         self.assertTrue(True)
+
+    def test_clear_widget_holder(self):
+        self.assertEqual(len(self.ex.winfo_children()), 0)
+        self.ex.widget_holder = tk.Label(master=self.ex)
+        self.assertEqual(len(self.ex.winfo_children()), 1)
+        self.ex.clear_widget_holder()
+        self.assertEqual(len(self.ex.winfo_children()), 0)
+
+    def test_get_replace_type(self):
+        sample_tags = [self.sample_iso, self.sample_rep_s, self.sample_rep_u]
+        expected_returns = [self.ex.replace_types[0],
+                            self.ex.replace_types[1],
+                            self.ex.replace_types[2]]
+        for i in range(len(sample_tags)):
+            self.assertEqual(self.ex.get_replace_type(sample_tags[i]),
+                             expected_returns[i])
 
     def test_get_parent_rep_tag(self):
         pattern = "test"
@@ -160,7 +182,7 @@ class TestClassFuncs(TKinterTestCase):
     #     self.assertEqual(len(options), len(opt_list) + 1)
 
 
-    def test_setup_rep_bind_tag_attacker_clean(self):
+    def test_setup_rep_bind_tag_attacker(self):
         """
         This test function is obviously too long, I'm just gonna go through and test
         as much as possible than figure out how we can generalize it
@@ -248,9 +270,9 @@ class TestClassFuncs(TKinterTestCase):
             utils.del_fn(typebox)
 
     def test_gen_changing_typebox_get_to_fro(self):
-        sample_iso = "_ISO_foobar"
-        sample_rep_s = "_REP_1_CNT_True_SNC_foobar"
-        sample_rep_u = "_REP_1_CNT_False_SNC_foobar"
+        sample_iso = self.sample_iso
+        sample_rep_s = self.sample_rep_s
+        sample_rep_u = self.sample_rep_u
         sample_iso_ret = self.ex.gen_changing_typebox_get_to_fro(sample_iso)
         sample_rep_s_ret = self.ex.gen_changing_typebox_get_to_fro(sample_rep_s)
         sample_rep_u_ret = self.ex.gen_changing_typebox_get_to_fro(sample_rep_u)
@@ -261,7 +283,61 @@ class TestClassFuncs(TKinterTestCase):
         self.assertEqual(sample_rep_u_ret[0], self.ex.replace_types[2])
         self.assertEqual(sample_rep_u_ret[1], self.ex.replace_types[1])
 
-    # def test_gen_changing_typebox(self):
+
+    # The handler is tested instead of the top-level function because unittest
+    # gets confused with the tkinter "after" function
+    def test_gen_changing_typebox_handler(self):
+        sample_tags = [self.sample_iso, self.sample_rep_s, self.sample_rep_u]
+
+        for t in sample_tags:
+            t_r1, t_r2 = self.ex.gen_changing_typebox_get_to_fro(t)
+            children = self.root.winfo_children()
+            self.assertEqual(len(children), 1)
+            self.ex.gen_changing_typebox_handler(self.ex_event, t)
+            children = self.root.winfo_children()
+            self.assertEqual(len(children), 2)
+            changing_typebox = children[1]
+            self.assertEqual(changing_typebox.winfo_class(), 'TFrame')
+            typebox_children = changing_typebox.winfo_children()
+            self.assertEqual(len(typebox_children), 3)
+            self.assertEqual(typebox_children[0].winfo_class(), 'Label')
+            self.assertEqual(typebox_children[0].cget('text'), t_r1[0])
+            self.assertEqual(typebox_children[1].winfo_class(), 'Label')
+            self.assertEqual(typebox_children[1].cget('text'), '-->')
+            self.assertEqual(typebox_children[2].winfo_class(), 'Label')
+            self.assertEqual(typebox_children[2].cget('text'), t_r2[0])
+            utils.del_fn(changing_typebox)
+
+        # # Test iso
+        # children = self.root.winfo_children()
+        # self.assertEqual(len(children), 1)
+        # self.ex.gen_changing_typebox_handler(self.ex_event, sample_iso)
+        # children = self.root.winfo_children()
+        # self.assertEqual(len(children), 2)
+        # changing_typebox_iso = children[1]
+        # self.assertEqual(changing_typebox_iso.winfo_class(), 'TFrame')
+        # typebox_children = changing_typebox_iso.winfo_children()
+        # self.assertEqual(len(typebox_children), 3)
+        # self.assertEqual(typebox_children[0].winfo_class(), 'Label')
+        # self.assertEqual(typebox_children[0].cget('text'), self.ex.replace_types[0][0])
+        # self.assertEqual(typebox_children[1].winfo_class(), 'Label')
+        # self.assertEqual(typebox_children[1].cget('text'), '-->')
+        # self.assertEqual(typebox_children[2].winfo_class(), 'Label')
+        # self.assertEqual(typebox_children[2].cget('text'), self.ex.replace_types[0][0])
+        # utils.del_fn(changing_typebox_iso)
+
+        # # Test rep_s
+        # self.ex.gen_changing_typebox_get_to_fro(sample_rep_s, self.ex_event)
+        # changing_typebox_rep_s = self.root.winfo_children()[1]
+        # self.assertEqual(changing_typebox_rep_s.winfo_class(), 'TFrame')
+        # utils.del_fn(changing_typebox_rep_s)
+        #
+        # # Test rep_u
+        # self.ex.gen_changing_typebox_get_to_fro(sample_rep_u, self.ex_event)
+        # changing_typebox_rep_u = self.root.winfo_children()[1]
+        # self.assertEqual(changing_typebox_rep_u.winfo_class(), 'TFrame')
+        # utils.del_fn(changing_typebox_rep_u)
+
 
 
     def test_add_tag_rep(self):
