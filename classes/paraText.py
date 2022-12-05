@@ -250,7 +250,7 @@ class paraText(tk.Text):
     def replace_texts(self, chosen_text, target_tags):
         for i in range(len(target_tags)):
             self.replace_text(chosen_text, target_tags[i])
-        self.clear_widget_holder()
+        self.focus_set()
 
     def change_sync_selection(self, event, attacker_tag):
         type_flag = attacker_tag[0:5]
