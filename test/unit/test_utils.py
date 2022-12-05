@@ -37,7 +37,21 @@ class TestUtils(unittest.TestCase):
         
         # negative test
         self.assertNotEqual(test_short_hex, hex(255))
+
+    def test_short_hex_to_dec(self):
+        hex_vals = ['13', '57', '99']
+        dec_vals = [19, 87, 153]
+
+        # positive test
+        test_dec = []
+        for he in hex_vals:
+            test_dec.append(u.short_hex_to_dec(he))
         
+        self.assertEqual(dec_vals, test_dec)
+        
+        # negative test
+        self.assertNotEqual(test_dec, hex_vals)
+
     def test_char_idx_to_ints(self):
         idxs = [1.2]
         idx1, idx2 = u.char_idx_to_ints('1.2')
