@@ -289,36 +289,6 @@ class TestClassFuncs(TKinterTestCase):
             self.assertEqual(typebox_children[2].cget('text'), t_r2[0])
             utils.del_fn(changing_typebox)
 
-        # # Test iso
-        # children = self.root.winfo_children()
-        # self.assertEqual(len(children), 1)
-        # self.ex.gen_changing_typebox_handler(self.ex_event, sample_iso)
-        # children = self.root.winfo_children()
-        # self.assertEqual(len(children), 2)
-        # changing_typebox_iso = children[1]
-        # self.assertEqual(changing_typebox_iso.winfo_class(), 'TFrame')
-        # typebox_children = changing_typebox_iso.winfo_children()
-        # self.assertEqual(len(typebox_children), 3)
-        # self.assertEqual(typebox_children[0].winfo_class(), 'Label')
-        # self.assertEqual(typebox_children[0].cget('text'), self.ex.replace_types[0][0])
-        # self.assertEqual(typebox_children[1].winfo_class(), 'Label')
-        # self.assertEqual(typebox_children[1].cget('text'), '-->')
-        # self.assertEqual(typebox_children[2].winfo_class(), 'Label')
-        # self.assertEqual(typebox_children[2].cget('text'), self.ex.replace_types[0][0])
-        # utils.del_fn(changing_typebox_iso)
-
-        # # Test rep_s
-        # self.ex.gen_changing_typebox_get_to_fro(sample_rep_s, self.ex_event)
-        # changing_typebox_rep_s = self.root.winfo_children()[1]
-        # self.assertEqual(changing_typebox_rep_s.winfo_class(), 'TFrame')
-        # utils.del_fn(changing_typebox_rep_s)
-        #
-        # # Test rep_u
-        # self.ex.gen_changing_typebox_get_to_fro(sample_rep_u, self.ex_event)
-        # changing_typebox_rep_u = self.root.winfo_children()[1]
-        # self.assertEqual(changing_typebox_rep_u.winfo_class(), 'TFrame')
-        # utils.del_fn(changing_typebox_rep_u)
-
 
 
     def test_add_tag_rep(self):
