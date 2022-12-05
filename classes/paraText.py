@@ -283,16 +283,14 @@ class paraText(tk.Text):
         self.tag_delete(oldtag)
         self.tag_add(newtag, bounds[0], bounds[1])
 
-    def change_sync(self, event, target_tags, attacker_tag, parent_tag):
+    def change_sync(self, event, attacker_tag, parent_tag):
         self.gen_changing_typebox(event, attacker_tag)
         type_flag = attacker_tag[0:5]
         if type_flag == self.isoFlag:
             self.focus_set()
         else:
             sync_flag = self.parse_child_rep_tag(attacker_tag)[1]
-            print(sync_flag)
             new_sync_flag = utils.str_not(sync_flag)
-            print(new_sync_flag)
             self.change_child_tag_sync_flag(attacker_tag, new_sync_flag, parent_tag)
             self.setup_rep_bind_tag(parent_tag)
 
@@ -417,7 +415,7 @@ class paraText(tk.Text):
                       )
         self.tag_bind(attacker_tag,
                       '<Shift-Button-1>',
-                      lambda e: self.change_sync(e, target_tags, attacker_tag, parent_tag)
+                      lambda e: self.change_sync(e, attacker_tag, parent_tag)
                       )
         underline_color = self.get_replace_type_color(attacker_tag)
         self.tag_config(attacker_tag,
