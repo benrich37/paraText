@@ -235,6 +235,11 @@ class paraText(tk.Text):
         return synced_tags
 
     def replace_text(self, chosen_text, target_tag):
+        """
+        :param (str) chosen_text: Text which will replace whatever the target_tag's text currently is
+        :param (str) target_tag: Tagname for child who's text we're replacing
+        :return:
+        """
         self.config(state=tk.NORMAL)
         init_bounds = self.tag_ranges(target_tag)
         if len(init_bounds) > 0:
