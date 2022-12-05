@@ -234,7 +234,7 @@ class paraText(tk.Text):
                 synced_tags.append(given_tags[i])
         return synced_tags
 
-    def replace_text(self, event, chosen_text, target_tag):
+    def replace_text(self, chosen_text, target_tag):
         self.config(state=tk.NORMAL)
         init_bounds = self.tag_ranges(target_tag)
         if len(init_bounds) > 0:
@@ -244,7 +244,7 @@ class paraText(tk.Text):
 
     def replace_texts(self, event, chosen_text, target_tags):
         for i in range(len(target_tags)):
-            self.replace_text(event, chosen_text, target_tags[i])
+            self.replace_text(chosen_text, target_tags[i])
         self.clear_widget_holder()
 
     def change_sync_selection(self, event, attacker_tag):
