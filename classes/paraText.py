@@ -282,17 +282,20 @@ class paraText(tk.Text):
         bounds = self.tag_ranges(oldtag)
         self.tag_delete(oldtag)
         self.tag_add(newtag, bounds[0], bounds[1])
+        self.update_idletasks()
+
+
+
+    def change_sync_worker(self, attacker_tag, parent_tag):
+        type_flag = attacker_tag[0:5]
+        sync_flag = self.parse_child_rep_tag(attacker_tag)[1]
+        new_sync_flag = utils.str_not(sync_flag)
+        self.change_child_tag_sync_flag(attacker_tag, new_sync_flag, parent_tag)
+        self.setup_rep_bind_tag(parent_tag)
 
     def change_sync(self, event, attacker_tag, parent_tag):
         self.gen_changing_typebox(event, attacker_tag)
-        type_flag = attacker_tag[0:5]
-        if type_flag == self.isoFlag:
-            self.focus_set()
-        else:
-            sync_flag = self.parse_child_rep_tag(attacker_tag)[1]
-            new_sync_flag = utils.str_not(sync_flag)
-            self.change_child_tag_sync_flag(attacker_tag, new_sync_flag, parent_tag)
-            self.setup_rep_bind_tag(parent_tag)
+        self.change_sync_worker(attacker_tag, parent_tag)
 
     def new_option(self, event, frame, parent_tag, target_tags, opt_idx, attacker_tag):
         opt_list = self.replace_tags[parent_tag]
