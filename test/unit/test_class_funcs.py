@@ -305,6 +305,23 @@ class TestClassFuncs(TKinterTestCase):
         self.ex.replace_text("bar", self.sample_iso)
         self.assertEqual(self.ex.get('2.0', 'end-1c'), 'bar' + self.sample_line[10:])
 
+    def test_replace_texts(self):
+        self.assertEqual(self.ex.get('2.0', 'end-1c'), self.sample_line)
+        self.ex.replace_texts('foo', [self.sample_iso])
+        self.assertEqual(self.ex.get('2.0', 'end-1c'), self.sample_line)
+        self.ex.tag_add(self.sample_iso, '2.0', '2.10')
+        self.ex.tag_add(self.sample_rep_s, '2.10', '2.20')
+        self.ex.tag_add(self.sample_rep_u, '2.20', 'end-1c')
+        self.ex.replace_texts('foo', [self.sample_iso])
+        self.assertEqual(self.ex.get('2.0', 'end-1c'), 'foo' + self.sample_line[10:])
+        self.ex.replace_texts('bar', [self.sample_iso, self.sample_rep_s])
+        self.assertEqual(self.ex.get('2.0', 'end-1c'), 'bar' + 'bar' + self.sample_line[20:])
+        self.ex.replace_texts('foo', [self.sample_iso, self.sample_rep_s, self.sample_rep_u])
+        self.assertEqual(self.ex.get('2.0', 'end-1c'), 'foo' + 'foo' + 'foo')
+        self.ex.replace_texts('bar', [self.sample_iso, self.sample_rep_u])
+        self.assertEqual(self.ex.get('2.0', 'end-1c'), 'bar' + 'foo' + 'bar')
+
+
 
 
 
