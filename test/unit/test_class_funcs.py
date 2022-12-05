@@ -39,6 +39,7 @@ class TKinterTestCase(unittest.TestCase):
         self.ex.unbind('<Button-1>')
 
         self.sample_iso = "_ISO_foobar"
+        self.sample_parent = "_REP_foobar"
         self.sample_rep_s = "_REP_1_CNT_True_SNC_foobar"
         self.sample_rep_u = "_REP_1_CNT_False_SNC_foobar"
 
@@ -143,6 +144,17 @@ class TestClassFuncs(TKinterTestCase):
         self.assertEqual(0, self.ex.get_init_rep_id(pattern))
         self.ex.add_tag_rep(pattern, opt_list)
         self.assertEqual(len(self.ex.rep_replace_tags[parent_tag]) - 1, self.ex.get_last_rep_id(pattern))
+
+    def test_append_child_tags(self):
+        self.assertRaises(KeyError, lambda: self.ex.rep_replace_tags[self.sample_parent])
+        self.ex.append_child_tags(self.sample_parent, self.sample_rep_s)
+        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_s])
+        self.ex.append_child_tags(self.sample_parent, self.sample_rep_s)
+        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_s])
+        self.ex.append_child_tags(self.sample_parent, self.sample_rep_u)
+        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_s,
+                                                                            self.sample_rep_u])
+
 
 
     # def test_setup_rep_bind_tag_attacker_old(self):
