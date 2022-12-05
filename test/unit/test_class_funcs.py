@@ -163,56 +163,6 @@ class TestClassFuncs(TKinterTestCase):
         self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent], [self.sample_rep_s,
                                                                             self.sample_rep_u])
 
-
-
-    # def test_setup_rep_bind_tag_attacker_old(self):
-    #     """
-    #     This test function is obviously too long, I'm just gonna go through and test
-    #     as much as possible than figure out how we can generalize it
-    #     """
-    #     #### SETUP ####
-    #
-    #     pattern = self.synonyms[0]
-    #     opt_list = self.synonyms
-    #     parent_tag = self.ex.get_parent_rep_tag(pattern)
-    #     synctag = "True"
-    #     self.ex.append_options(parent_tag, opt_list)
-    #     matches = utils.return_matches(self.ex, pattern)
-    #     for i in range(len(matches)):
-    #         ctag_i = self.ex.get_child_rep_tag(0 + i,
-    #                                         synctag,
-    #                                         pattern)
-    #         self.ex.append_child_tags(parent_tag, ctag_i)
-    #         bound1 = matches[i]
-    #         bound2 = utils.add_to_char_idx(matches[i], len(pattern))
-    #         self.ex.tag_add(ctag_i,
-    #                      bound1,
-    #                      bound2
-    #                      )
-    #     attacker_tags = self.ex.rep_replace_tags[parent_tag]
-    #     attacker_tag = attacker_tags[0]
-    #     ####
-    #
-    #     self.ex.setup_rep_bind_tag_attacker(attacker_tag, attacker_tag, parent_tag)
-    #     self.ex.update_idletasks()
-    #     # get coordinates of where this was created
-    #     bounds = self.ex.tag_ranges(attacker_tag)
-    #     coords = self.ex.bbox(bounds[0])
-    #     # Make sure the most recently added widget is the paraText widget itself
-    #     self.assertEqual(self.root.winfo_children()[-1].winfo_class(), self.ex.winfo_class())
-    #     # ESSENTIAL!!! There must be motion event on text with bound events before they can trigger
-    #     self.ex.event_generate('<Motion>', x=coords[0], y=coords[1])
-    #     self.ex.event_generate('<Button-2>', x=coords[0], y=coords[1])
-    #     self.ex.event_generate('<ButtonRelease-2>', x=coords[0], y=coords[1])
-    #     option_list = self.root.winfo_children()[1]
-    #     # Most recently created widget should be a TFrame
-    #     self.assertEqual(option_list.winfo_class(), 'TFrame')
-    #     options = option_list.winfo_children()
-    #     # The frame should have each option as a child, along with an indicator box
-    #     # telling the user the sync state of the child rep clicked (created by gen_typebox)
-    #     self.assertEqual(len(options), len(opt_list) + 1)
-
-
     def test_setup_rep_bind_tag_attacker(self):
         """
         This test function is obviously too long, I'm just gonna go through and test
