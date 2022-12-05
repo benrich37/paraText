@@ -427,6 +427,11 @@ class paraText(tk.Text):
             self.setup_rep_bind_tag_attacker(attacker_tags[i], target_tags, parent_tag)
 
     def append_child_tags(self, parent_tag, child_tag):
+        """
+        :param (str) parent_tag: Parent tag who's child list we're append
+        :param (str) child_tag: Child tag we're appending
+        :return:
+        """
         if not parent_tag in self.rep_replace_tags:
             self.rep_replace_tags[parent_tag] = []
         utils.append_no_dup(child_tag, self.rep_replace_tags[parent_tag])
