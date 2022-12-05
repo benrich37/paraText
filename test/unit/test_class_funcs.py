@@ -112,6 +112,14 @@ class TestClassFuncs(TKinterTestCase):
         self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_u, self.sample_rep_u]),
                              [])
 
+    def test_change_child_tag_sync_flag(self):
+        self.ex.tag_add(self.sample_rep_s, "1.0", "1.5")
+        self.ex.append_child_tags(self.sample_parent, self.sample_rep_s)
+        self.assertEqual(self.ex.rep_replace_tags[self.sample_parent][0], self.sample_rep_s)
+        self.ex.change_child_tag_sync_flag(self.sample_rep_s, self.ex.syncFalse, self.sample_parent)
+        self.assertEqual(self.ex.rep_replace_tags[self.sample_parent][0], self.sample_rep_u)
+
+
     def test_append_options(self):
         pattern = self.synonyms[0]
         parent_tag = self.ex.get_parent_rep_tag(pattern)
