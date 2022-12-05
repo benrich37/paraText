@@ -30,7 +30,11 @@ class TKinterTestCase(unittest.TestCase):
         self.root.title('Test')
         self.synonyms = ['concise', 'terse']
         self.ex = paraText.paraText()
-        self.ex.insert('1.0', 'I will be concise. I want to be concise. I hope to one day be concise. ')
+        self.sample_line = 'abcdefghijklmnopqrstuvwxyz'
+        self.ex.insert('1.0', 'I will be concise. I want to be concise. I hope to one day be concise. \n')
+        self.ex.insert('2.0', self.sample_line)
+        # self.ex.insert('3.0', self.sample_line)
+        # self.ex.insert('4.0', self.sample_line)
         self.ex.grid(column=0, row=0, padx=5, pady=5)
         self.pump_events()
 
@@ -289,10 +293,24 @@ class TestClassFuncs(TKinterTestCase):
             self.assertEqual(typebox_children[2].cget('text'), t_r2[0])
             utils.del_fn(changing_typebox)
 
+    def test_replace_text(self):
+        self.assertEqual(self.ex.get('2.0', 'end-1c'), self.sample_line)
+        self.ex.replace_text("foo", self.sample_iso)
+        self.assertEqual(self.ex.get('2.0', 'end-1c'), self.sample_line)
+        self.ex.tag_add(self.sample_iso, '2.0', '2.10')
+        self.ex.replace_text("foo", self.sample_iso)
+        self.assertEqual(self.ex.get('2.0', 'end-1c'), 'foo' + self.sample_line[10:])
+        self.ex.replace_text("foo", self.sample_iso)
+        self.assertEqual(self.ex.get('2.0', 'end-1c'), 'foo' + self.sample_line[10:])
+        self.ex.replace_text("bar", self.sample_iso)
+        self.assertEqual(self.ex.get('2.0', 'end-1c'), 'bar' + self.sample_line[10:])
 
 
-    def test_add_tag_rep(self):
-        self.ex.add_tag_rep(self.synonyms[0], self.synonyms, sync=self.ex.syncTrue)
+
+
+
+    # def test_add_tag_rep(self):
+    #     self.ex.add_tag_rep(self.synonyms[0], self.synonyms, sync=self.ex.syncTrue)
 
 if __name__ == '__main__':
     unittest.main()
