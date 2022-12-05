@@ -18,4 +18,3 @@ dependencies:
   - wheel=0.37.1=pyhd3eb1b0_0
   - xz=5.2.8=h6c40b1e_0
   - zlib=1.2.13=h4dc903c_0
-prefix: /Users/richb/anaconda3/envs/paraText
