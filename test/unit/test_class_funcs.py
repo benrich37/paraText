@@ -100,6 +100,17 @@ class TestClassFuncs(TKinterTestCase):
         self.assertEqual(self.ex.interp_sync_arg(True), self.ex.syncTrue)
         self.assertEqual(self.ex.interp_sync_arg(False), self.ex.syncFalse)
 
+    def test_get_synced_tags(self):
+        self.assertEqual(self.ex.get_synced_tags([]), [])
+        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_s, self.sample_rep_s]),
+                             [self.sample_rep_s, self.sample_rep_s])
+        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_u, self.sample_rep_s]),
+                             [self.sample_rep_s])
+        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_s, self.sample_rep_u]),
+                             [self.sample_rep_s])
+        self.assertListEqual(self.ex.get_synced_tags([self.sample_rep_u, self.sample_rep_u]),
+                             [])
+
     def test_append_options(self):
         pattern = self.synonyms[0]
         parent_tag = self.ex.get_parent_rep_tag(pattern)
