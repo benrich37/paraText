@@ -301,7 +301,7 @@ class paraText(tk.Text):
         self.gen_changing_typebox(event, attacker_tag)
         self.change_sync_worker(attacker_tag, parent_tag)
 
-    def new_option(self, event, frame, parent_tag, target_tags, opt_idx, attacker_tag):
+    def new_option(self, frame, parent_tag, target_tags, opt_idx):
         opt_list = self.replace_tags[parent_tag]
         new_opt = tk.Label(master=frame, text=opt_list[opt_idx], borderwidth=1, relief="solid")
         new_opt.config(background=self.default_color)
@@ -334,7 +334,7 @@ class paraText(tk.Text):
         frame = ttk.Frame(self.master)
         opt_boxes = []
         for i in range(len(opt_list)):
-            opt_boxes.append(self.new_option(event, frame, parent_tag, target_tags, i, attacker_tag))
+            opt_boxes.append(self.new_option(frame, parent_tag, target_tags, i))
             opt_boxes[i].grid(row=i, column=1, sticky=tk.W)
         replace_type = self.get_replace_type(attacker_tag)
         type_box = self.gen_typebox(replace_type, frame)
