@@ -247,7 +247,7 @@ class paraText(tk.Text):
             self.delete(init_bounds[0], init_bounds[1])
         self.config(state=tk.DISABLED)
 
-    def replace_texts(self, event, chosen_text, target_tags):
+    def replace_texts(self, chosen_text, target_tags):
         for i in range(len(target_tags)):
             self.replace_text(chosen_text, target_tags[i])
         self.clear_widget_holder()
@@ -297,7 +297,7 @@ class paraText(tk.Text):
         new_opt.config(background=self.default_color)
         new_opt.bind('<Button-1>', lambda e: self.change_highlight_sel(e, new_opt))
         new_opt.bind('<ButtonRelease-1>',
-                     lambda e: self.replace_texts(e, opt_list[opt_idx], target_tags))
+                     lambda e: self.replace_texts(opt_list[opt_idx], target_tags))
         return new_opt
 
     def gen_typebox(self, replace_type, frame):
