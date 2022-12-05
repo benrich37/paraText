@@ -90,6 +90,9 @@ class paraText(tk.Text):
         widget.config(background=self.neg_click_color)
 
     def clear_widget_holder(self):
+        """ Deletes whatever widget was put in the class widget holder
+        :return:
+        """
         print('clearing widget holder')
         utils.del_fn(self.widget_holder)
         self.widget_holder = None
@@ -103,17 +106,22 @@ class paraText(tk.Text):
     ### vvv
 
     def get_replace_type(self, tag):
+        """ Extracts an informative string telling the replace type of provided tag
+        :param (str) tag: tag to look at
+        :return (str) rep_type: Informative string of replace type
+        """
         tag1 = tag[0:5]
         if tag1 == self.isoFlag:
-            return self.replace_types[0]
+            rep_type = self.replace_types[0]
         elif tag1 == self.repFlag:
             synctag = self.parse_child_rep_tag(tag)[1]
             if synctag == self.syncTrue:
-                return self.replace_types[1]
+                rep_type = self.replace_types[1]
             else:
-                return self.replace_types[2]
+                rep_type = self.replace_types[2]
         else:
             raise ValueError("Unexpected tag")
+        return rep_type
 
     def get_child_rep_tag(self, idx, sync, pattern):
         """ Concatenates the child rep tag via given arguments and class variables
@@ -213,6 +221,10 @@ class paraText(tk.Text):
             utils.append_no_dup(opt_list[i], self.replace_tags[tag])
 
     def get_synced_tags(self, given_tags):
+        """
+        :param (list of str) given_tags: List of all tags to analyze
+        :return (list of str) synced_tags: All tags from given_tags that have sync set to True
+        """
         synced_tags = []
         for i in range(len(given_tags)):
             sync_arg = self.parse_child_rep_tag(given_tags[i])[1]
@@ -415,7 +427,6 @@ class paraText(tk.Text):
             self.setup_rep_bind_tag_attacker(attacker_tags[i], target_tags, parent_tag)
 
     def append_child_tags(self, parent_tag, child_tag):
-        # print('appendibng child tags')
         if not parent_tag in self.rep_replace_tags:
             self.rep_replace_tags[parent_tag] = []
         utils.append_no_dup(child_tag, self.rep_replace_tags[parent_tag])
