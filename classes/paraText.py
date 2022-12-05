@@ -58,6 +58,7 @@ class paraText(tk.Text):
         self.rep_replace_tags = {}
         self.default_sync = self.syncTrue
         self.widget_holder = None
+        self.bind('<Button-1>', lambda e: self.focus_set())
 
 
 
@@ -244,11 +245,12 @@ class paraText(tk.Text):
         self.replace_text_handler(chosen_text, target_i)
         # This below is obviously dangerous, at some point we should put the widget's
         # master in the widget holder incase the structure of this option menu changes
-        utils.del_fn(event.widget.master)
+        # utils.del_fn(event.widget.master)
 
     def replace_texts(self, event, chosen_text, target_tags):
         for i in range(len(target_tags)):
             self.replace_text(event, chosen_text, target_tags[i])
+        self.clear_widget_holder()
 
     def change_sync_selection(self, event, attacker_tag):
         type_flag = attacker_tag[0:5]
