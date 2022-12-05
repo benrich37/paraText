@@ -1,5 +1,6 @@
 import math
 
+
 hex_chars = "0123456789ABCDEF"
 
 def str_not(string):
@@ -10,53 +11,84 @@ def str_not(string):
     """
     return not(string == "True")
 
+
 def make_darker(hex_color, dark_fac=2):
-    """ Function which decreases intensity of each color channel to make dark
-    :param      (str) hex_color: A string signifying a hex color (#RRGGBB, where RR/GG/BB hold 0 -> 256 in base 16)
-    :param     (float) dark_fac: Factor to decrease each color channel by (ie for dark_fac=2, #101010 turns into #050505")
-    :return (str) new_hex_color: String for new hex color
+    """Function to decrease intensity of each color channel to make darker
+
+    Parameters
+    ----------
+    hex_color: hex color code as a string (#RRGGBB)
+
+    dark_fac: integer factor to decrease each color channel by
+              default value is 2
+
+    Returns
+    -------
+    new_hex_color
+        string with new hex color code
     """
     if hex_color[0] != "#":
         # if it doesn't start with # it's probably not a hex color string
         raise ValueError
+
     else:
-        # split the channels into elements of a list
-        hex_i = [hex_color[1:3],hex_color[3:5],hex_color[5:]]
+        # split each channel into elements of a list
+        hex_i = [hex_color[1:3], hex_color[3:5], hex_color[5:]]
+
+        # hold the channel values in base 10
         dec_i = []
         for he in hex_i:
-            # hold the channel values in base 10
-            dec_i.append(int(short_hex_to_dec(he)))
-        dec_changes = []
+            dec_i.append(short_hex_to_dec(he))
+
+        # decrease each color channel value by half
+        dec_changed = []
         for de in dec_i:
-            # decrease each color channel by half of the current channel value
-            dec_changes.append(math.floor(de/dark_fac))
-        dec_f = []
-        for i in [0,1,2]:
-            # perform the subtraction
-            dec_f.append(dec_i[i] - dec_changes[i])
+            dec_changed.append(math.floor(de/dark_fac))
+
+        # convert back to base 16
         hex_f = []
-        for de in dec_f:
-            # convert back to base 16
-            hex_f.append(get_short_hex(de))
+        for de in dec_changed:
+            num = int(math.floor(de))
+            full_hex = hex(num)
+            full_hex_str = str(full_hex)
+            short_hex = full_hex[full_hex_str.index('x') + 1:]
+            hex_f.append(short_hex)
+
     new_hex_color = "#" + hex_f[0] + hex_f[1] + hex_f[2]
+
     return new_hex_color
 
+
 def get_short_hex(num):
+    """Function to convert to hex and remove '0x' from hex value
+
+    Parameters
+    ----------
+    num: number in base 10
+
+    Returns
+    -------
+    short_hex
+        cleaned up number in base 16
     """
-    :param      (float) num: a number in base 10
-    :return (str) short_hex: a cleaned up number in base 16
-    """
-    # the built in hex function for some reason has a '0x' at the beginning of the string
-    # (ie hex(1) returns '0x1' and hex(255) returns '0xff') so this truncates off the
-    # '0x' to get just the actual hex number (ie '1' or 'ff')
-    full_hex = str(hex(math.floor(num)))
+    num = int(math.floor(num))
+    full_hex = str(hex(num))
     short_hex = full_hex[full_hex.index('x') + 1:]
+
     return short_hex
 
+
 def short_hex_to_dec(short_hex):
-    """
-    :param   (str) short_hex: A number in base 16
-    :return (int) return_sum: The same number in base 10
+    """Function to convert hex number to base 10
+
+    Parameters
+    ----------
+    short_hex: A number in base 16 (hexadecimal)
+
+    Returns
+    -------
+    return_sum
+        the same number in base 10
     """
     # converts a number in hex to its respective number in base 10
     digs = len(short_hex)
@@ -66,9 +98,10 @@ def short_hex_to_dec(short_hex):
         return_sum += dig_dec
     return return_sum
 
+
 def char_idx_to_ints(char_idx):
     """Returns the integers in a char index string
-    
+
     Parameters
     ----------
     char_idx: a character index string
@@ -78,26 +111,25 @@ def char_idx_to_ints(char_idx):
     -------
     line_idx
         integer contained in first position of char_idx
-    
+
     col_idx
         integer contained in the second position of char_idx
     """
-    # converts a char idx (line number,character number) into invidiual ints from each part
-    
     split = char_idx.index('.')
     line_idx = int(char_idx[0:split])
     col_idx = int(char_idx[split + 1:])
     return line_idx, col_idx
-    
+
+
 def ints_to_char_idx(line_idx, col_idx):
     """Generates char_idx as a string
-    
+
     Parameters
     ----------
     line_idx: int for line number
-    
+
     col_idx: int for column number
-    
+
     Returns
     -------
     char_idx
@@ -107,18 +139,19 @@ def ints_to_char_idx(line_idx, col_idx):
     char_idx = str(line_idx) + '.' + str(col_idx)
     return char_idx
 
+
 def add_to_char_idx(char_idx, mod_int, add=True):
-    """Add or remove a number from the col idx
-    
+    """Add or remove a number to the col idx
+
     Parameters
     ----------
     char_idx: string for character index
-    
+
     mod_int: integer to add or subtract from col idx
-    
+
     add: bool
          True if adding, False if subtracting
-    
+
     Returns
     -------
     new_char_idx
@@ -132,6 +165,7 @@ def add_to_char_idx(char_idx, mod_int, add=True):
     new_char_idx = ints_to_char_idx(line_idx, new_col_idx)
     return new_char_idx
 
+
 def del_fn(widg):
     """ Simple function that we can call easily instead of having to construct a bunch of
     lambda functions
@@ -140,6 +174,7 @@ def del_fn(widg):
     :return         None:
     """
     widg.destroy()
+
 
 def return_matches(twidget, pattern):
     """
@@ -160,6 +195,7 @@ def return_matches(twidget, pattern):
             results.append(resulti)
     return results
 
+
 def get_text_by_tagname(twidget, tagname):
     """
     :param    (Widget) twidget: Text-widget that (hopefully) has some text tagged by the tagname
@@ -171,6 +207,7 @@ def get_text_by_tagname(twidget, tagname):
         print('only returning first tagged section')
     current_text = twidget.get(bounds[0], bounds[1])
     return current_text
+
 
 def insert_at_end(twidget, end_char_idx, insert_text):
     """ This function just inserts a word at the end of a word and then deletes
@@ -192,6 +229,7 @@ def insert_at_end(twidget, end_char_idx, insert_text):
     twidget.delete(del_char_idx)
     twidget.insert(insert_char_idx, cut_text)
 
+
 def insert(twidget, tagname, newtext):
     """
     :param (Widget) twidget: Text widget we're operating on
@@ -201,6 +239,7 @@ def insert(twidget, tagname, newtext):
     """
     init_char_idx_bounds = twidget.tag_ranges(tagname)
     insert_at_end(twidget, init_char_idx_bounds[1], newtext)
+
 
 def replace(twidget, tagname, newtext):
     """
@@ -217,6 +256,7 @@ def replace(twidget, tagname, newtext):
         return None
     insert(twidget, tagname, newtext)
     twidget.delete(init_char_idx_bounds[0], init_char_idx_bounds[1])
+
 
 def append_no_dup(item, list):
     """
