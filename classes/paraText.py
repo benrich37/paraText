@@ -233,16 +233,16 @@ class paraText(tk.Text):
         return synced_tags
 
     def replace_text_handler(self, chosen_text, target_tag):
+        self.config(state=tk.NORMAL)
         init_bounds = self.tag_ranges(target_tag)
         if len(init_bounds) > 0:
             utils.insert(self, target_tag, chosen_text)
             self.delete(init_bounds[0], init_bounds[1])
+        self.config(state=tk.DISABLED)
 
     def replace_text(self, event, chosen_text, target_i):
-        self.config(state=tk.NORMAL)
         self.replace_text_handler(chosen_text, target_i)
         utils.del_fn(event.widget.master)
-        self.config(state=tk.DISABLED)
 
     def replace_texts(self, event, chosen_text, target_tags):
         for i in range(len(target_tags)):
