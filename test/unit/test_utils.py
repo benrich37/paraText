@@ -21,8 +21,9 @@ class TestUtils(unittest.TestCase):
         
         # error handling: handles invalid hex code being parsed
         # invalid code: doesn't start with #
+        with self.assertRaises(ValueError):
+            u.make_darker('12346', dark_fac)
 
-        
     def test_char_idx_to_ints(self):
         idxs = [1.2]
         idx1, idx2 = u.char_idx_to_ints('1.2')
