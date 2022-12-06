@@ -257,16 +257,16 @@ class paraText(tk.Text):
             self.replace_text(chosen_text, target_tags[i])
         self.focus_set()
 
-    def change_sync_selection(self, event, attacker_tag):
-        type_flag = attacker_tag[0:5]
-        if type_flag == self.isoFlag:
-            self.change_highlight_neg(event, event.widget)
-        else:
-            sync_flag = self.parse_child_rep_tag(attacker_tag)
-            if sync_flag == self.syncTrue:
-                self.change_highlight_down(event, event.widget)
-            else:
-                self.change_highlight_up(event, event.widget)
+    # def change_sync_selection(self, event, attacker_tag):
+    #     type_flag = attacker_tag[0:5]
+    #     if type_flag == self.isoFlag:
+    #         self.change_highlight_neg(event, event.widget)
+    #     else:
+    #         sync_flag = self.parse_child_rep_tag(attacker_tag)
+    #         if sync_flag == self.syncTrue:
+    #             self.change_highlight_down(event, event.widget)
+    #         else:
+    #             self.change_highlight_up(event, event.widget)
 
     def change_child_tag_sync_flag(self, oldtag, new_sync_flag, parent_tag):
         """
