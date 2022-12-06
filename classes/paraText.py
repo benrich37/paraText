@@ -7,11 +7,11 @@ import copy
 
 class paraText(tk.Text):
     repFlag = "_REP_"
+    isoFlag = "_ISO_"
     repIdFlag = "_CNT_"
     syncFlag = "_SNC_"
     syncTrue = "True"
     syncFalse = "False"
-    isoFlag = "_ISO_"
 
     replace_sync_types = [
         syncTrue,
@@ -446,6 +446,10 @@ class paraText(tk.Text):
         self.update_idletasks()
 
     def setup_rep_bind_tag(self, parent_tag):
+        """ Goes through all children for a parent_tag and sets up the proper binds
+        :param (str) parent_tag: tagname of parent we're traversing
+        :return:
+        """
         # attacker_tags are tags which we will bind replace commands upon
         # target_tags are the tags which will undergo text replacement if a command is executed
         # synced_tags indicate tags which are synced to each other
