@@ -415,6 +415,12 @@ class paraText(tk.Text):
         self.after(500, self.clear_widget_holder)
 
     def setup_rep_bind_tag_attacker(self, attacker_tag, target_tags, parent_tag):
+        """
+        :param (str) attacker_tag: specific child tagname we are binding seq/funcs to
+        :param (list of str) target_tags: all other child tagnames subject to change by actions from attacker
+        :param (str) parent_tag: parent name of the children
+        :return:
+        """
         self.tag_bind(attacker_tag,
                       '<Button-2>',
                       lambda e: self.gen_options(e,
