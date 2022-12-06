@@ -377,10 +377,18 @@ class TestClassFuncs(TKinterTestCase):
             self.assertTrue(s in seqs)
 
     def test_setup_rep_bind_tag(self):
-        None
         # set up the parent/children in memory
+        self.ex.rep_replace_tags[self.sample_parent] = [self.sample_rep_s1, self.sample_rep_s2]
         # Make sure each child tag is actually tagged in the text
+        self.ex.tag_add(self.sample_rep_s1, '1.1')
+        self.ex.tag_add(self.sample_rep_s2, '1.2')
+        self.ex.setup_rep_bind_tag(self.sample_parent)
         # Perform same passing metric as written for add_tag_rep
+        expected_seqs = ['<Button-2>', '<Shift-Button-2>', '<Shift-Button-1>']
+        for t in self.ex.rep_replace_tags[self.sample_parent]:
+            seqs = self.ex.tag_bind(t, None, None)
+            for s in expected_seqs:
+                self.assertTrue(s in seqs)
 
 
 
