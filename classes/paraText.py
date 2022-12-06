@@ -34,35 +34,36 @@ class paraText(tk.Text):
     # _ISO_blahblah
     ## a tag with surface text blahblah that is only expected to appear once
     # _REP_12_CNT_FALSE_SNC_blahblah
-    ## a tag with surface text blahblah with personal id '12' and requests no sync
+    ## a tag with surface text blahblah with personal id '12' and
+    ## requests no sync
     # _REP_3_CNT_TRUE_SNC_blahblah
     ## a tag with surface text blahblah with personal id '3' and requests sync
-    ### (a change to another tag with the same surface pattern will trigger a change to this tag, and vice versa)
-    
+    ### (a change to another tag with the same surface pattern will trigger a
+    ### change to this tag, and vice versa)
+
     # https://htmlcolorcodes.com/color-picker/
-    default_color="#FF5E3B"
+    default_color = "#FF5E3B"
     default_opaque_color = "#FFFFFF"
-    sel_click_color="#3BB3FF"
-    up_click_color="#FF3B3B"
-    down_click_color="#FF9D3B"
-    neg_click_color="#C8B1B1"
+    sel_click_color = "#3BB3FF"
+    up_click_color = "#FF3B3B"
+    down_click_color = "#FF9D3B"
+    neg_click_color = "#C8B1B1"
     # defaultunderlinecolor="red"
     # syncedunderlinecolor="#EE8100"
 
     def __init__(self, master=None, cnf={}, **kw):
         tk.Widget.__init__(self, master, 'text', cnf, kw)
-        # replace_tags is a dictionary with tags, key values being the options possible
+        # replace_tags is a dictionary with tags, key values being the options
+        # possible
         # if tag has the iso flag, that tag is the tag used
-        # if tag has the rep flag, look in rep_replace_tags for all tags actually used (each tag must be unique)
+        # if tag has the rep flag, look in rep_replace_tags for all tags
+        # actually used (each tag must be unique)
         self.replace_tags = {}
         self.rep_replace_tags = {}
         self.default_sync = self.syncTrue
         self.widget_holder = None
         self.focus_set()
         self.bind('<Button-1>', lambda e: self.focus_set())
-
-
-
 
     ###
     ############
@@ -108,7 +109,8 @@ class paraText(tk.Text):
     ### vvv
 
     def get_replace_type(self, tag):
-        """ Extracts an informative string telling the replace type of provided tag
+        """ Extracts an informative string telling the replace type of
+               provided tag
         :param (str) tag: tag to look at
         :return (str) rep_type: Informative string of replace type
         """
@@ -126,13 +128,15 @@ class paraText(tk.Text):
         return rep_type
 
     def get_child_rep_tag(self, idx, sync, pattern):
-        """ Concatenates the child rep tag via given arguments and class variables
+        """ Concatenates the child rep tag via given arguments and class
+               variables
         :param idx: (int) child ID to use
         :param sync: (bool or str) True/False for whether its synced
         :param pattern: (str) Pattern of parent tag
         :return child_rep_tag: (str) String of constructed child rep tag
         """
-        child_rep_tag = self.repFlag + str(idx) + self.repIdFlag + str(sync) + self.syncFlag + pattern
+        child_rep_tag = self.repFlag + str(idx) + self.repIdFlag\
+            + str(sync) + self.syncFlag + pattern
         return child_rep_tag
 
     def get_parent_rep_tag(self, pattern):
@@ -197,7 +201,7 @@ class paraText(tk.Text):
         :return start_id: Integer of child ID to use for first appended child
         """
         parent_tag = self.get_parent_rep_tag(pattern)
-        if not parent_tag in self.rep_replace_tags:
+        if parent_tag not in self.rep_replace_tags:
             start_id = 0
         else:
             start_id = self.get_last_rep_id(pattern) + 1
@@ -217,7 +221,7 @@ class paraText(tk.Text):
         :param opt_list: List of strings to be added to the tags option list
         :return None:
         """
-        if not tag in self.replace_tags:
+        if tag not in self.replace_tags:
             self.replace_tags[tag] = []
         for i in range(len(opt_list)):
             utils.append_no_dup(opt_list[i], self.replace_tags[tag])
@@ -225,7 +229,8 @@ class paraText(tk.Text):
     def get_synced_tags(self, given_tags):
         """
         :param (list of str) given_tags: List of all tags to analyze
-        :return (list of str) synced_tags: All tags from given_tags that have sync set to True
+        :return (list of str) synced_tags: All tags from given_tags that have
+                                              sync set to True
         """
         synced_tags = []
         for i in range(len(given_tags)):
@@ -236,7 +241,8 @@ class paraText(tk.Text):
 
     def replace_text(self, chosen_text, target_tag):
         """
-        :param (str) chosen_text: Text which will replace whatever the target_tag's text currently is
+        :param (str) chosen_text: Text which will replace whatever the
+                                     target_tag's text currently is
         :param (str) target_tag: Tagname for child who's text we're replacing
         :return:
         """
@@ -249,8 +255,10 @@ class paraText(tk.Text):
 
     def replace_texts(self, chosen_text, target_tags):
         """
-        :param (str) chosen_text: Text which will replace whatever the target_tags' text currently are
-        :param (list of str) target_tags: Tagnames of children who's text we're replacing
+        :param (str) chosen_text: Text which will replace whatever the
+                                     target_tags' text currently are
+        :param (list of str) target_tags: Tagnames of children who's text
+                                             we're replacing
         :return:
         """
         for i in range(len(target_tags)):
@@ -284,17 +292,19 @@ class paraText(tk.Text):
         self.tag_add(newtag, bounds[0], bounds[1])
         self.update_idletasks()
 
-
-
     def change_sync_worker(self, attacker_tag, parent_tag):
         """
-        :param (str) attacker_tag: Tagname of child who's sync option we're changing
-        :param (str) parent_tag: Tagname of child's parent for updating the memory
+        :param (str) attacker_tag: Tagname of child who's sync option we're
+                                      changing
+        :param (str) parent_tag: Tagname of child's parent for updating the
+                                    memory
         :return:
         """
         sync_flag = self.parse_child_rep_tag(attacker_tag)[1]
         new_sync_flag = utils.str_not(sync_flag)
-        self.change_child_tag_sync_flag(attacker_tag, new_sync_flag, parent_tag)
+        self.change_child_tag_sync_flag(attacker_tag,
+                                        new_sync_flag,
+                                        parent_tag)
         self.setup_rep_bind_tag(parent_tag)
 
     def change_sync(self, event, attacker_tag, parent_tag):
@@ -306,26 +316,36 @@ class paraText(tk.Text):
         :param (Widget) frame: The widget holding all the new options
         :param (str) parent_tag: The tagname of the target's parent
         :param (str) target_tags: The tags which will have their text changed
-        :param (int) opt_idx: An int referring to which option from the option list this widget will refer to
-        :return (Widget) new_opt: The label widget which will trigger a change to the specified option
+        :param (int) opt_idx: An int referring to which option from the option
+                                 list this widget will refer to
+        :return (Widget) new_opt: The label widget which will trigger a change
+                                     to the specified option
         """
         opt_list = self.replace_tags[parent_tag]
-        new_opt = tk.Label(master=frame, text=opt_list[opt_idx], borderwidth=1, relief="solid")
+        new_opt = tk.Label(master=frame,
+                           text=opt_list[opt_idx],
+                           borderwidth=1,
+                           relief="solid")
         new_opt.config(background=self.default_color)
-        new_opt.bind('<Button-1>', lambda e: self.change_highlight_sel(e, new_opt))
+        new_opt.bind('<Button-1>',
+                     lambda e: self.change_highlight_sel(e, new_opt))
         new_opt.bind('<ButtonRelease-1>',
-                     lambda e: self.replace_texts(opt_list[opt_idx], target_tags))
+                     lambda e: self.replace_texts(opt_list[opt_idx],
+                                                  target_tags))
         return new_opt
 
     def gen_typebox(self, replace_type, frame):
         """ Generates the box in the topleft of an option list to tell the user
                what the sync type of the clicked selection currently is
         :param replace_type (str): The string for what the sync currently is
-        :param     frame (Widget): The parent frame holding the typebox along with the options
+        :param     frame (Widget): The parent frame holding the typebox along
+                                      with the options
         :return:
         """
         color = self.replace_type_dict[replace_type]
-        type_box = tk.Label(master=frame, text=replace_type[0], background=color)
+        type_box = tk.Label(master=frame,
+                            text=replace_type[0],
+                            background=color)
         return type_box
 
     def gen_options(self, event, parent_tag, target_tags, attacker_tag):
@@ -335,13 +355,17 @@ class paraText(tk.Text):
         :param       (str) parent_tag: parent tagname of tagged selection
         :param       (str) target_tags: tagnames of selections to be changed
         :param       (str) attacker_tag: tagname of the selection clicked on
-        :returns: (action) Generates a list of clickable options to replace text within the document
+        :returns: (action) Generates a list of clickable options to replace
+                              text within the document
         """
         opt_list = self.replace_tags[parent_tag]
         frame = ttk.Frame(self.master)
         opt_boxes = []
         for i in range(len(opt_list)):
-            opt_boxes.append(self.new_option(frame, parent_tag, target_tags, i))
+            opt_boxes.append(self.new_option(frame,
+                                             parent_tag,
+                                             target_tags,
+                                             i))
             opt_boxes[i].grid(row=i, column=1, sticky=tk.W)
         replace_type = self.get_replace_type(attacker_tag)
         type_box = self.gen_typebox(replace_type, frame)
@@ -390,9 +414,15 @@ class paraText(tk.Text):
 
         frame = ttk.Frame(self.master)
         r1, r2 = self.gen_changing_typebox_get_to_fro(attacker_tag)
-        b1 = tk.Label(master=frame, text=r1[0], background=self.replace_type_dict[r1])
-        b2 = tk.Label(master=frame, text='-->', background=self.default_opaque_color)
-        b3 = tk.Label(master=frame, text=r2[0], background=self.replace_type_dict[r2])
+        b1 = tk.Label(master=frame,
+                      text=r1[0],
+                      background=self.replace_type_dict[r1])
+        b2 = tk.Label(master=frame,
+                      text='-->',
+                      background=self.default_opaque_color)
+        b3 = tk.Label(master=frame,
+                      text=r2[0],
+                      background=self.replace_type_dict[r2])
         b1.grid(row=0, column=0)
         b2.grid(row=0, column=1)
         b3.grid(row=0, column=2)
@@ -405,7 +435,7 @@ class paraText(tk.Text):
 
     def gen_changing_typebox(self, event, attacker_tag):
 
-        """ Creates a box which tells the user info about changing the sync type
+        """Creates a box which tells the user info about changing the sync type
         :param event: Event which triggered gen_changing_typebox
         :param attacker_tag: Tag of selection which received triggering event
         :return:
@@ -414,10 +444,12 @@ class paraText(tk.Text):
         self.gen_changing_typebox_handler(event, attacker_tag)
         self.after(500, self.clear_widget_holder)
 
-    def setup_rep_bind_tag_attacker(self, attacker_tag, target_tags, parent_tag):
+    def setup_rep_bind_tag_attacker(self,
+                                    attacker_tag, target_tags, parent_tag):
         """
-        :param (str) attacker_tag: specific child tagname we are binding seq/funcs to
-        :param (list of str) target_tags: all other child tagnames subject to change by actions from attacker
+        :param (str) attacker_tag: child tagname we are binding seq/funcs to
+        :param (list of str) target_tags: all other child tagnames subject to
+                                             change by actions from attacker
         :param (str) parent_tag: parent name of the children
         :return:
         """
@@ -446,12 +478,14 @@ class paraText(tk.Text):
         self.update_idletasks()
 
     def setup_rep_bind_tag(self, parent_tag):
-        """ Goes through all children for a parent_tag and sets up the proper binds
+        """ Goes through all children for a parent_tag and sets up the proper
+               binds
         :param (str) parent_tag: tagname of parent we're traversing
         :return:
         """
         # attacker_tags are tags which we will bind replace commands upon
-        # target_tags are the tags which will undergo text replacement if a command is executed
+        # target_tags are the tags which will undergo text replacement if a
+        # command is executed
         # synced_tags indicate tags which are synced to each other
         # (all bound replace commands will replace all other synced tags)
         attacker_tags = self.rep_replace_tags[parent_tag]
@@ -461,7 +495,9 @@ class paraText(tk.Text):
                 target_tags = copy.deepcopy(syncd_tags)
             else:
                 target_tags = [attacker_tags[i]]
-            self.setup_rep_bind_tag_attacker(attacker_tags[i], target_tags, parent_tag)
+            self.setup_rep_bind_tag_attacker(attacker_tags[i],
+                                             target_tags,
+                                             parent_tag)
 
     def append_child_tags(self, parent_tag, child_tag):
         """
@@ -469,16 +505,19 @@ class paraText(tk.Text):
         :param (str) child_tag: Child tag we're appending
         :return:
         """
-        if not parent_tag in self.rep_replace_tags:
+        if parent_tag not in self.rep_replace_tags:
             self.rep_replace_tags[parent_tag] = []
         utils.append_no_dup(child_tag, self.rep_replace_tags[parent_tag])
 
     def add_tag_rep(self, pattern, opt_list, sync=None):
         """
-        :param (str) pattern: String of pattern to search for, where each instance of this pattern in the text will
+        :param (str) pattern: String of pattern to search for, where each
+                                 instance of this pattern in the text will
                                  get tagged a unique child tagname
-        :param (list of str) opt_list: A list of strings which will serve as options available for substitution
-        :param (bool) sync: Whether these children will be initiated as synced or unsynced
+        :param (list of str) opt_list: A list of strings which will serve as
+                                          options available for substitution
+        :param (bool) sync: Whether these children will be initiated as synced
+                               or unsynced
         :return:
         """
         parent_tag = self.get_parent_rep_tag(pattern)
