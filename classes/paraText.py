@@ -302,6 +302,13 @@ class paraText(tk.Text):
         self.change_sync_worker(attacker_tag, parent_tag)
 
     def new_option(self, frame, parent_tag, target_tags, opt_idx):
+        """
+        :param (Widget) frame: The widget holding all the new options
+        :param (str) parent_tag: The tagname of the target's parent
+        :param (str) target_tags: The tags which will have their text changed
+        :param (int) opt_idx: An int referring to which option from the option list this widget will refer to
+        :return (Widget) new_opt: The label widget which will trigger a change to the specified option
+        """
         opt_list = self.replace_tags[parent_tag]
         new_opt = tk.Label(master=frame, text=opt_list[opt_idx], borderwidth=1, relief="solid")
         new_opt.config(background=self.default_color)
