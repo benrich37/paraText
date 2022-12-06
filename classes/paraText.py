@@ -470,6 +470,13 @@ class paraText(tk.Text):
         utils.append_no_dup(child_tag, self.rep_replace_tags[parent_tag])
 
     def add_tag_rep(self, pattern, opt_list, sync=None):
+        """
+        :param (str) pattern: String of pattern to search for, where each instance of this pattern in the text will
+                                 get tagged a unique child tagname
+        :param (list of str) opt_list: A list of strings which will serve as options available for substitution
+        :param (bool) sync: Whether these children will be initiated as synced or unsynced
+        :return:
+        """
         parent_tag = self.get_parent_rep_tag(pattern)
         synctag = self.interp_sync_arg(sync)
         self.append_options(parent_tag, opt_list)
