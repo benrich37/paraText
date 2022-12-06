@@ -356,7 +356,7 @@ class TestClassFuncs(TKinterTestCase):
         self.ex.replace_texts('bar', [self.sample_iso, self.sample_rep_u1])
         self.assertEqual(self.ex.get('2.0', 'end-1c'), 'bar' + 'foo' + 'bar')
 
-    def test_setup_rep_bind_attacker(self):
+    def test_add_tag_rep(self):
         # This test only checks that all of the expected sequences are binded to each tagname,
         # as how tkinter remembers what functions are binded to each sequence is very
         # hard to interpret
@@ -367,6 +367,19 @@ class TestClassFuncs(TKinterTestCase):
             seqs = self.ex.tag_bind(t, None, None)
             for s in expected_seqs:
                 self.assertTrue(s in seqs)
+
+    def test_setup_rep_bind_attacker(self):
+        self.ex.tag_add(self.sample_rep_u1, '1.0')
+        self.ex.setup_rep_bind_tag_attacker(self.sample_rep_u1, [self.sample_rep_u1], self.sample_parent)
+        expected_seqs = ['<Button-2>', '<Shift-Button-2>', '<Shift-Button-1>']
+        seqs = self.ex.tag_bind(self.sample_rep_u1, None, None)
+        for s in expected_seqs:
+            self.assertTrue(s in seqs)
+
+    def test_setup_rep_bind_tag(self):
+        # set up the parent/children in memory
+        # Make sure each child tag is actually tagged in the text
+        # Perform same passing metric as written for add_tag_rep
 
 
 
