@@ -31,7 +31,9 @@ class TKinterTestCase(unittest.TestCase):
         self.synonyms = ['concise', 'terse']
         self.ex = paraText.paraText()
         self.sample_line = 'abcdefghijklmnopqrstuvwxyz'
-        self.ex.insert('1.0', 'I will be concise. I want to be concise. I hope to one day be concise. \n')
+        self.ex_phrase_concise = 'I will be concise. I want to be concise. I hope to one day be concise.'
+        self.ex_phrase_terse = 'I will be terse. I want to be terse. I hope to one day be terse.'
+        self.ex.insert('1.0', self.ex_phrase_concise + '\n')
         self.ex.insert('2.0', self.sample_line)
         # self.ex.insert('3.0', self.sample_line)
         # self.ex.insert('4.0', self.sample_line)
@@ -247,6 +249,19 @@ class TestClassFuncs(TKinterTestCase):
         self.assertEqual(len(opt_list), len(option_list_options))
         for i in range(len(opt_list)):
             self.assertEqual(opt_list[i], option_list_options[i].cget('text'))
+
+    def test_new_option(self):
+        # Set up the the full parent/child/options family
+        ex_parent = self.ex.get_parent_rep_tag(self.synonyms[0])
+        self.ex.add_tag_rep(self.synonyms[0], self.synonyms, sync=self.ex.syncTrue)
+        self.assertEqual(self.ex.get('1.0', 'end').splitlines()[0], self.ex_phrase_concise)
+        ex_frame = ttk.Frame(self.ex.master)
+        ex_opt = self.ex.new_option(ex_frame, ex_parent, self.ex.rep_replace_tags[ex_parent], 1)
+        ex_opt.grid(row=0, column=1, sticky=tk.W)
+        ex_frame.place(x=10, y=10)
+        self.ex.update_idletasks()
+        event_gen.left_click_coord(ex_opt, [ex_opt.winfo_x(), ex_opt.winfo_y()])
+        self.assertEqual(self.ex.get('1.0', 'end').splitlines()[0], self.ex_phrase_terse)
 
     def test_gen_typebox(self):
         replace_types = self.ex.replace_types
