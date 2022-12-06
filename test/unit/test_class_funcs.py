@@ -377,6 +377,7 @@ class TestClassFuncs(TKinterTestCase):
             self.assertTrue(s in seqs)
 
     def test_setup_rep_bind_tag(self):
+        None
         # set up the parent/children in memory
         # Make sure each child tag is actually tagged in the text
         # Perform same passing metric as written for add_tag_rep
