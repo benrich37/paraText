@@ -3,11 +3,11 @@ import math
 
 def str_not(string):
     """ Performs 'not(...)' on strings
-    
+
     Parameters
     ----------
     string: either 'True' or 'False'
-    
+
     Returns
     -------
     None
@@ -46,7 +46,7 @@ def make_darker(hex_color, dark_fac=2):
         # decrease each color channel value by half
         dec_changed = []
         for de in dec_i:
-            dec_changed.append(math.floor(de/dark_fac))
+            dec_changed.append(math.floor(de / dark_fac))
 
         # convert back to base 16
         hex_f = []
@@ -99,7 +99,7 @@ def short_hex_to_dec(short_hex):
     digs = len(short_hex)
     return_sum = 0
     for i in range(digs):
-        dig_dec = hex_chars.index(short_hex[i])*(16**(digs-1-i))
+        dig_dec = hex_chars.index(short_hex[i]) * (16 ** (digs - 1 - i))
         return_sum += dig_dec
     return return_sum
 
@@ -173,7 +173,7 @@ def add_to_char_idx(char_idx, mod_int, add=True):
 
 def del_fn(widg):
     """Function that destroys a desired widget
-    
+
     Paramters
     ---------
     widg: the widget you wish to delete
@@ -187,13 +187,13 @@ def del_fn(widg):
 
 def return_matches(twidget, pattern):
     """Search for a text pattern in a text-containing widget
-    
+
     Parameters
     ----------
     twidget: text-containing widget to search through
-    
+
     pattern: str text pattern to search for
-    
+
     Returns
     -------
     results
@@ -215,11 +215,11 @@ def return_matches(twidget, pattern):
 
 def get_text_by_tagname(twidget, tagname):
     """Search for a tag name to find text under tag
-    
+
     Parameters
     ----------
     twidget: text-widget that has some text tagged by the tagname
-    
+
     tagname: str name of the tag you want to look for
 
     Returns
@@ -242,11 +242,11 @@ def insert_at_end(twidget, end_char_idx, insert_text):
     Parameters
     ----------
     twidget: text widget you're operating on
-    
+
     end_char_idx: str char idx of where we're going to insert the new word
-    
+
     insert_text: text you're inserting as an str
-    
+
     Returns
     -------
     None
@@ -262,15 +262,15 @@ def insert_at_end(twidget, end_char_idx, insert_text):
 
 def insert(twidget, tagname, newtext):
     """Inserts new text into a specific tag name
-    
+
     Parameters
     ----------
     twidget: text widget you're operating on
-    
+
     tagname: tagname whose text selection to insert into as an str
-    
+
     newtext: text to insert as an str
-    
+
     Returns
     -------
     None
@@ -281,23 +281,23 @@ def insert(twidget, tagname, newtext):
 
 def replace(twidget, tagname, newtext):
     """Replaces text in a specific tag name
-    
+
     Parameters
     ----------
     twidget: text widget you're operating on
-    
+
     tagname: tagname whose text you're replacing
-    
+
     newtext: text you want to replace with
-    
+
     Returns
     -------
     None
     """
     init_char_idx_bounds = twidget.tag_ranges(tagname)
     if len(init_char_idx_bounds) > 2:
-        # If this ever gets called, then the tagname convention has failed and it created
-        # the same child_rep_tag twice for separate children
+        # If this ever gets called, then the tagname convention has failed and
+        # it created the same child_rep_tag twice for separate children
         print('too many matches, no replacements done')
         return None
     insert(twidget, tagname, newtext)
@@ -306,17 +306,17 @@ def replace(twidget, tagname, newtext):
 
 def append_no_dup(item, list):
     """Appends items to a list if item is not already in the list
-    
+
     Parameters
     ----------
     item: item to add
-    
+
     list: list to add to
-    
+
     Returns
     -------
     None
     """
     # (used most commonly for appending options)
-    if not item in list:
+    if item not in list:
         list.append(item)
