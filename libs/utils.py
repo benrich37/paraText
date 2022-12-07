@@ -103,7 +103,6 @@ def short_hex_to_dec(short_hex):
         return_sum += dig_dec
     return return_sum
 
-
 def char_idx_to_ints(char_idx):
     """Returns the integers in a char index string
 
@@ -151,7 +150,6 @@ def add_to_char_idx(char_idx, mod_int, add=True):
     Parameters
     ----------
     char_idx: string for character index
-
     mod_int: integer to add or subtract from col idx
 
     add: bool

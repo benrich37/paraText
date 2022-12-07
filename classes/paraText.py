@@ -6,6 +6,7 @@ import copy
 
 
 class paraText(tk.Text):
+    # String variables which will be called when constructing tag strings
     repFlag = "_REP_"
     isoFlag = "_ISO_"
     repIdFlag = "_CNT_"
@@ -18,12 +19,14 @@ class paraText(tk.Text):
         syncFalse
     ]
 
+    # listing possible types for cosmetic purposes later on
     replace_types = [
         "iso",
         "synced",
         "unsynced"
     ]
 
+    # Hex colors to sync up with different possible types
     replace_type_dict = {
         replace_types[0]: "#5376FE",
         replace_types[1]: "#FFBCBC",
@@ -53,14 +56,19 @@ class paraText(tk.Text):
 
     def __init__(self, master=None, cnf={}, **kw):
         tk.Widget.__init__(self, master, 'text', cnf, kw)
-        # replace_tags is a dictionary with tags, key values being the options
-        # possible
+        # replace_tags is a dictionary with tags, key values being the options possible
+        ## replace_tags will only have iso tags and parent rep tags
         # if tag has the iso flag, that tag is the tag used
         # if tag has the rep flag, look in rep_replace_tags for all tags
         # actually used (each tag must be unique)
         self.replace_tags = {}
+        # rep_replace_tags is a dictionary with all the parent rep tags being used, and the key values are all the
+        # child rep tags being used
         self.rep_replace_tags = {}
+        # whether setting up rep tags will default to sync them together or not
         self.default_sync = self.syncTrue
+        # May delete later - this is just a temporary variable to store in the paraText class so that particular widgets
+        # can be accessed easily if desired
         self.widget_holder = None
         self.focus_set()
         self.bind('<Button-1>', lambda e: self.focus_set())
@@ -74,21 +82,20 @@ class paraText(tk.Text):
     ### vvv
 
     def get_replace_type_color(self, tag):
+        # give a tag, return the designated color for the tag type
         replace_type = self.get_replace_type(tag)
         return self.replace_type_dict[replace_type]
 
+
+    # Bunch of functions to change widget backgrounds to class variable colors
     def change_highlight_default(self, event, widget):
         widget.config(background=self.default_color)
-
     def change_highlight_sel(self, event, widget):
         widget.config(background=self.sel_click_color)
-
     def change_highlight_up(self, event, widget):
         widget.config(background=self.up_click_color)
-
     def change_highlight_down(self, event, widget):
         widget.config(background=self.down_click_color)
-
     def change_highlight_neg(self, event, widget):
         widget.config(background=self.neg_click_color)
 
@@ -172,7 +179,7 @@ class paraText(tk.Text):
         return return_id, sync_arg, pattern
 
     def interp_sync_arg(self, syncarg):
-        """
+        """ Makes sure the syncarg given gets turned into the problem sync option flag
         :param syncarg: Boolean for if we're syncing or not
         :return syncflag: String to be used as tag for interpreting syncing
         """
@@ -349,7 +356,7 @@ class paraText(tk.Text):
         return type_box
 
     def gen_options(self, event, parent_tag, target_tags, attacker_tag):
-        """
+        """ Generates the options dropdown menu
         :param     (Event) event: Event which triggered the function
                                      (A right click on some tagged text)
         :param       (str) parent_tag: parent tagname of tagged selection
@@ -411,7 +418,6 @@ class paraText(tk.Text):
         :param attacker_tag: Tag of selection which received triggering event
         :return:
         """
-
         frame = ttk.Frame(self.master)
         r1, r2 = self.gen_changing_typebox_get_to_fro(attacker_tag)
         b1 = tk.Label(master=frame,
@@ -465,16 +471,22 @@ class paraText(tk.Text):
                       '<Shift-Button-2>',
                       lambda e: self.gen_changing_typebox(e, attacker_tag)
                       )
+        # Binds shift-button-1 to change the sync option for the attacker_tag (changes the tagname and re-sets up all
+        # the actions)
         self.tag_bind(attacker_tag,
                       '<Shift-Button-1>',
                       lambda e: self.change_sync(e, attacker_tag, parent_tag)
                       )
         underline_color = self.get_replace_type_color(attacker_tag)
+        # This should probably be its own function - just sets up the text color and stuff to give visual indicator
+        # for what kind of sync type it is
         self.tag_config(attacker_tag,
                         underline=True,
                         underlinefg=underline_color,
                         foreground=utils.make_darker(underline_color)
                         )
+        # update_idletasks makes sure that tasks that aren't refreshed by default get refreshed to make sure everything
+        # changed appropriately (very much a safety net kind of function)
         self.update_idletasks()
 
     def setup_rep_bind_tag(self, parent_tag):
