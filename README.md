@@ -19,9 +19,8 @@ As science continues to grow rapidly with new fields and knowledge, so does the 
 ## Application 
 This is a screen recording showing how it works. The words highlighted in red are synced, meaning that if one of them is changed, all instances of that word will be changed. If it’s yellow, only one instance of the word will be changed, not both. 
 
-<p align="center">
-  <src=" https://user-images.githubusercontent.com/91628000/206312726-d8b5bc65-f743-4a87-8cc3-4c8e8ae6e28d.mov">
-</p>
+  https://user-images.githubusercontent.com/91628000/206312726-d8b5bc65-f743-4a87-8cc3-4c8e8ae6e28d.mov
+
 
 
 
