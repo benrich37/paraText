@@ -3,5 +3,4 @@ channels:
   - defaults
 dependencies:
   - pycodestyle
-  - tkinter
   - numpy
