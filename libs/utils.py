@@ -1,17 +1,6 @@
 import math
 
 
-hex_chars = "0123456789ABCDEF"
-
-def str_not(string):
-    """ Function which can perform 'not(...)' on strings (because for some reason
-           bool(any non-empty string) -> True)
-    :param string: Either "True" or "False"
-    :return:
-    """
-    return not(string == "True")
-
-
 def make_darker(hex_color, dark_fac=2):
     """Function to decrease intensity of each color channel to make darker
 
@@ -90,6 +79,8 @@ def short_hex_to_dec(short_hex):
     return_sum
         the same number in base 10
     """
+    hex_chars = "0123456789ABCDEF"
+
     # converts a number in hex to its respective number in base 10
     digs = len(short_hex)
     return_sum = 0
@@ -167,27 +158,39 @@ def add_to_char_idx(char_idx, mod_int, add=True):
 
 
 def del_fn(widg):
-    """ Simple function that we can call easily instead of having to construct a bunch of
-    lambda functions
+    """Function that destroys a desired widget
+    
+    Paramters
+    ---------
+    widg: the widget you wish to delete
 
-    :param (Widget) widg: The widget we wish to delete
-    :return         None:
+    Returns
+    -------
+    None
     """
     widg.destroy()
 
 
 def return_matches(twidget, pattern):
-    """
-    :param       (Widget) twidget: Text-containing widget we wish to search through
-    :param          (Str) pattern: Text-pattern we wish to search for
-    :return (list of str) results: A list of char indices where each element is either the beginning
-                                    or ending char index of where the pattern appears
+    """Search for a text pattern in a text-containing widget
+    
+    Parameters
+    ----------
+    twidget: text-containing widget to search through
+    
+    pattern: str text pattern to search for
+    
+    Returns
+    -------
+    results
+        list of char indices as strings specifying position of search term
     """
     results = []
     over = False
     last_char_idx = '1.0'
     while not over:
-        resulti = twidget.search(pattern, last_char_idx, stopindex=twidget.index('end'))
+        resulti = twidget.search(pattern, last_char_idx,
+                                 stopindex=twidget.index('end'))
         if len(resulti) == 0:
             over = True
         else:
@@ -197,10 +200,18 @@ def return_matches(twidget, pattern):
 
 
 def get_text_by_tagname(twidget, tagname):
-    """
-    :param    (Widget) twidget: Text-widget that (hopefully) has some text tagged by the tagname
-    :param       (str) tagname: The name of the tag we want to look for
-    :return (str) current_text: The text currently under the tag
+    """Search for a tag name to find text under tag
+    
+    Parameters
+    ----------
+    twidget: text-widget that has some text tagged by the tagname
+    
+    tagname: str name of the tag you want to look for
+
+    Returns
+    -------
+    current_text
+        the text currently under the tag
     """
     bounds = twidget.tag_ranges(tagname)
     if len(bounds) > 2:
@@ -210,16 +221,21 @@ def get_text_by_tagname(twidget, tagname):
 
 
 def insert_at_end(twidget, end_char_idx, insert_text):
-    """ This function just inserts a word at the end of a word and then deletes
-    the final character, ie if we want to insert 'Word' into 'Sentence', the
-    end result would be 'SentencWord' - By inserting within the word and THEN
-    deleting that last character, tkinter doesn't delete the existing tag
+    """Inserts a word at the end of a word and deletes the final character
+    ex: if you want to insert 'Word' into 'Sentence', the end result would be
+    'SentencWord' - this way, tkinter doesn't delete the existing tag
 
-
-    :param   (Widget) twidget: Text widget we're operating on
-    :param (str) end_char_idx: char idx of where we're going to insert the new word
-    :param  (str) insert_text: Text we're inserting
-    :return              None: (only in-place operations)
+    Parameters
+    ----------
+    twidget: text widget you're operating on
+    
+    end_char_idx: str char idx of where we're going to insert the new word
+    
+    insert_text: text you're inserting as an str
+    
+    Returns
+    -------
+    None
     """
     text_len = len(insert_text)
     insert_char_idx = add_to_char_idx(str(end_char_idx), 1, add=False)
@@ -231,22 +247,38 @@ def insert_at_end(twidget, end_char_idx, insert_text):
 
 
 def insert(twidget, tagname, newtext):
-    """
-    :param (Widget) twidget: Text widget we're operating on
-    :param    (str) tagname: tagname who's text selection we're inserting into
-    :param    (str) newtext: text we're inserting
-    :return            None:
+    """Inserts new text into a specific tag name
+    
+    Parameters
+    ----------
+    twidget: text widget you're operating on
+    
+    tagname: tagname whose text selection to insert into as an str
+    
+    newtext: text to insert as an str
+    
+    Returns
+    -------
+    None
     """
     init_char_idx_bounds = twidget.tag_ranges(tagname)
     insert_at_end(twidget, init_char_idx_bounds[1], newtext)
 
 
 def replace(twidget, tagname, newtext):
-    """
-    :param (Widget) twidget: Text-widget we're operating on
-    :param    (str) tagname: tagname who's text we're replacing
-    :param    (str) newtext: Text we're replacing with
-    :return            None:
+    """Replaces text in a specific tag name
+    
+    Parameters
+    ----------
+    twidget: text widget you're operating on
+    
+    tagname: tagname whose text you're replacing
+    
+    newtext: text you want to replace with
+    
+    Returns
+    -------
+    None
     """
     init_char_idx_bounds = twidget.tag_ranges(tagname)
     if len(init_char_idx_bounds) > 2:
@@ -259,12 +291,18 @@ def replace(twidget, tagname, newtext):
 
 
 def append_no_dup(item, list):
+    """Appends items to a list if item is not already in the list
+    
+    Parameters
+    ----------
+    item: item to add
+    
+    list: list to add to
+    
+    Returns
+    -------
+    None
     """
-    :param  item: Item to add
-    :param  list: List to add to
-    :return None: (in-place operations only)
-    """
-    # Simple function to add an item to a list iff its not already in the list
     # (used most commonly for appending options)
     if not item in list:
         list.append(item)
