@@ -10,7 +10,7 @@ The motivation of this project is based on the need to make technical writing mo
 ## Current Problem 
 As science continues to grow rapidly with new fields and knowledge, so does the complexity of the vocabulary. For the uneducated audience, too much time is spent on re-reading text and using outside resources to patch together a contextualized understanding. The result is that the learning experience is fragmented and often co-dependent on several resources. paraText attempts to eliminate this through the use of an interactive text that gives replacement options for confusing phrases and words outside of everyday vernacular. 
 
-![image](https://user-images.githubusercontent.com/91628000/206314640-c4285ff6-91e2-4e8c-b529-abb598c202ca.png)
+![image](https://user-images.githubusercontent.com/91628000/206314640-c4285ff6-91e2-4e8c-b529-abb598c202ca.png = 250x250)
 
 
 ## Application 
