@@ -1,5 +1,7 @@
 import tkinter as tk
 import tkinter.font as tkFont
+sys.path.insert(0, '/home/jovyan/paraText/libs')
+import BSTTree
 from BSTTree import *
 
 def opening_file(filename, compiled_list):
