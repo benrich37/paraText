@@ -1,6 +1,20 @@
 import math
 
 
+def str_not(string):
+    """ Performs 'not(...)' on strings
+    
+    Parameters
+    ----------
+    string: either 'True' or 'False'
+    
+    Returns
+    -------
+    None
+    """
+    return not(string == "True")
+
+
 def make_darker(hex_color, dark_fac=2):
     """Function to decrease intensity of each color channel to make darker
 
