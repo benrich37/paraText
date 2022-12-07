@@ -1,5 +1,7 @@
 import sys
 import unittest
+sys.path.insert(0, '/home/jovyan/paraText/libs')
+import BSTTree
 from BSTTree import *
 
 class BSTtest(unittest.TestCase):
