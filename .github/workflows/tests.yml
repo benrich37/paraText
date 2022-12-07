@@ -48,5 +48,5 @@ jobs:
       - run: |
           cd test
           cd unit
-          python -m unittest test_utils
-#          python -m unittest test_class_funcs
+          python -m unittest test_utils |
+          python -m unittest test_class_funcs
