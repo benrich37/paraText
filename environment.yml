@@ -1,0 +1,6 @@
+name: paraText
+channels:
+  - defaults
+dependencies:
+  - pycodestyle
+  - numpy

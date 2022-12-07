@@ -1,0 +1,52 @@
+name: Tests
+
+on:
+  push:
+      branches: [test_dev]
+  pull_request:
+      branches: [test_dev]
+
+jobs:
+#   code_style:
+#     runs-on: ubuntu-latest
+#     defaults:
+#       run:
+#         shell: bash -l {0}
+#     steps:
+#       - uses: actions/checkout@v3
+#       - uses: conda-incubator/setup-miniconda@v2
+#         with:
+#           activate-environment: paraText
+#           environment-file: environment.yml
+#       - run: pycodestyle $(git ls-files "*.py")
+  
+#  Add this back when functional tests are written
+#  functional_tests:
+#     runs-on: ubuntu-latest
+#     defaults:
+#       run:
+#         shell: bash -l {0}
+#     steps:
+#       - uses: actions/checkout@v3
+#       - uses: conda-incubator/setup-miniconda@v2
+#         with:
+#           activate-environment: gtex
+#           environment-file: environment.yml
+#       - run: bash test_search_cutoff.sh
+
+  unit_tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: paraText
+          environment-file: environment.yml
+      - run: |
+          cd test
+          cd unit
+          python -m unittest test_utils 
+#          python -m unittest test_class_funcs
