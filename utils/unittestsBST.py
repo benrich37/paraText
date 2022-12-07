@@ -1,7 +1,7 @@
 import sys
 import unittest
 from BSTTree import *
-​
+
 class BSTtest(unittest.TestCase):
     def constructor(self):
         test_bst = BST()
