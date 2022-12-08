@@ -10,8 +10,7 @@ jobs:
   test:
     strategy:
       matrix:
-         os: [ubuntu-latest]
-#        os: [macos-latest, ubuntu-latest, windows-latest]
+         os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
