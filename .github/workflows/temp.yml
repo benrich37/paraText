@@ -6,6 +6,15 @@ on:
   pull_request:
       branches: [display_test]
 
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - run: npm install
+    - run: sudo apt-get install xvfb
+    - run: xvfb-run --auto-servernum npm test
+
 #jobs:
 #   class_functions:
 #     runs-on: ubuntu-latest
@@ -23,18 +32,18 @@ on:
 #           environment-file: environment.yml
 #       - run: python test/unit/test_class_funcs.py
 
-jobs:
-  display_test:
-    build:
-      env:
-        DISPLAY: :0
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: conda-incubator/setup-miniconda@v2
-      - with:
-        activate-environment: paraText
-        environment-file: environment.yml
-      - run: sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
-      - run: sudo /usr/bin/Xvfb $DISPLAY -screen 0 1280x1024x24 &
+#jobs:
+#  display_test:
+#    build:
+#      env:
+#        DISPLAY: :0
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v3
+#      - uses: conda-incubator/setup-miniconda@v2
+#      - with:
+#        activate-environment: paraText
+#        environment-file: environment.yml
+#      - run: sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
+#      - run: sudo /usr/bin/Xvfb $DISPLAY -screen 0 1280x1024x24 &
                
