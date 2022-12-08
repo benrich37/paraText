@@ -5,6 +5,9 @@ dependencies:
   - pycodestyle
   - numpy
   - python=3.10
-  - pip:
-      - tk-tools
-#      - tkinter
+  - apt-get
+  - apt-get:
+      python3-tk
+#  - pip:
+#      - tk-tools
+##      - tkinter
