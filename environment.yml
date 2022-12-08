@@ -4,5 +4,7 @@ channels:
 dependencies:
   - pycodestyle
   - numpy
-  - python3.10-tk
-  - tk
+  - python=3.10
+  - pip:
+      - tk
+      - tkinter
