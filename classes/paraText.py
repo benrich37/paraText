@@ -468,11 +468,23 @@ class paraText(tk.Text):
                                                  )
                       )
         self.tag_bind(attacker_tag,
+                      '<Button-3>',
+                      lambda e: self.gen_options(e,
+                                                 parent_tag,
+                                                 target_tags,
+                                                 attacker_tag
+                                                 )
+                      )
+        self.tag_bind(attacker_tag,
                       '<Shift-Button-2>',
                       lambda e: self.gen_changing_typebox(e, attacker_tag)
                       )
         # Binds shift-button-1 to change the sync option for the attacker_tag (changes the tagname and re-sets up all
         # the actions)
+        self.tag_bind(attacker_tag,
+                      '<Shift-Button-3>',
+                      lambda e: self.gen_changing_typebox(e, attacker_tag)
+                      )
         self.tag_bind(attacker_tag,
                       '<Shift-Button-1>',
                       lambda e: self.change_sync(e, attacker_tag, parent_tag)
