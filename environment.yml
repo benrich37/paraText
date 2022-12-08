@@ -5,7 +5,7 @@ dependencies:
   - pycodestyle
   - numpy
   - python=3.10
-  - apt-get
+#  - apt-get
   - apt-get:
       python3-tk
 #  - pip:
