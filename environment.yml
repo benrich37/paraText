@@ -4,4 +4,4 @@ channels:
 dependencies:
   - pycodestyle
   - numpy
-  - python=latest
+  - python=3.10.6=haa1d7c7_0
