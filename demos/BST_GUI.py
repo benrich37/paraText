@@ -1,8 +1,13 @@
 import tkinter as tk
 import tkinter.font as tkFont
-sys.path.insert(0, '/home/jovyan/paraText/libs')
-import BSTTree
-from BSTTree import *
+import sys
+import os
+# sys.path.insert(0, '/home/jovyan/paraText/libs')
+mainpath = os.path.join(os.path.dirname(__file__), '../')
+sys.path.append(mainpath)
+# from libs import BSTTree
+# import BSTTree
+from libs.BSTTree import *
 
 def opening_file(filename, compiled_list):
     boolean_var = True
@@ -44,7 +49,7 @@ if __name__ == '__main__':
     canvas1.create_window(200, 100, window=main_label)
 
     list_of_names = []
-    list_of_names = opening_file('words2.txt',list_of_names)
+    list_of_names = opening_file('../test/reference/words2.txt',list_of_names)
     remove_newline(list_of_names) 
     print(list_of_names) 
 
