@@ -10,101 +10,29 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+         os: [ubuntu-latest]
+#        os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: miniconda
-        uses: conda-incubator/setup-miniconda@v2
-        with:
-          activate-environment: paraText
-          environment-file: environment.yml
+#      - name: miniconda
+#        uses: conda-incubator/setup-miniconda@v2
+#        with:
+#          activate-environment: paraText
+#          environment-file: environment.yml
 
       - name: Setup headless display
         uses: pyvista/setup-headless-display-action@v1
 
-#      - name: Setup Python
-#        uses: actions/setup-python@v1
-#        with:
-#          python-version: 3.9
+      - name: Setup Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.9
 #
 #      - name: Install PyVista
 #        run: pip install pyvista
 
       - name: Run unit test
         run: python test/unit/test_class_funcs.py
-
-#      - name: Use PyVista
-#        run: python -c "import pyvista;pyvista.Sphere().plot(screenshot='${{ matrix.os }}-sphere.png')"
-#
-#      - uses: actions/upload-artifact@v2
-#        with:
-#          name: sphere
-#          path: ${{ matrix.os }}-sphere.png
-
-# https://github.com/pyvista/setup-headless-display-action
-#jobs:
-#  test:
-#    strategy:
-#      matrix:
-#        os: [macos-latest, ubuntu-latest, windows-latest]
-#    runs-on: ${{ matrix.os }}
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v2
-#
-#      - name: Setup headless display
-#        uses: pyvista/setup-headless-display-action@v1
-#
-#      - name: Setup Python
-#        uses: actions/setup-python@v1
-#        with:
-#          python-version: 3.9
-#
-#      - name: run test
-#      - run: python test/unit/test_class_funcs.py
-
-
-#jobs:
-#  test:
-#    runs-on: ubuntu-latest
-#    steps:
-#    - uses: actions/checkout@v1
-#    # - run: npm install
-#    - run: sudo apt-get install xvfb
-#    - run: xvfb-run --auto-servernum npm test
-
-#jobs:
-#   class_functions:
-#     runs-on: ubuntu-latest
-##     defaults:
-##       run:
-##         shell: bash -l {0}
-#     steps:
-#       - uses: actions/checkout@v3
-#       - uses: conda-incubator/setup-miniconda@v2
-#       - run: npm install
-#       - run: sudo apt-get install xvfb
-#       # - run: xvfb-run --auto-servernum npm test
-#         with:
-#           activate-environment: paraText
-#           environment-file: environment.yml
-#       - run: python test/unit/test_class_funcs.py
-
-#jobs:
-#  display_test:
-#    build:
-#      env:
-#        DISPLAY: :0
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v3
-#      - uses: conda-incubator/setup-miniconda@v2
-#      - with:
-#        activate-environment: paraText
-#        environment-file: environment.yml
-#      - run: sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
-#      - run: sudo /usr/bin/Xvfb $DISPLAY -screen 0 1280x1024x24 &
-               
