@@ -18,4 +18,4 @@ jobs:
          with:
            activate-environment: paraText
            environment-file: environment.yml
-       - run: pycodestyle $(git ls-files "*.py")
+       - run: python test/unit/test_class_funcs.py
