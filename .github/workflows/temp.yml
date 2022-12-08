@@ -6,19 +6,31 @@ on:
   pull_request:
       branches: [display_test]
 
+#jobs:
+#   class_functions:
+#     runs-on: ubuntu-latest
+##     defaults:
+##       run:
+##         shell: bash -l {0}
+#     steps:
+#       - uses: actions/checkout@v3
+#       - uses: conda-incubator/setup-miniconda@v2
+#       - run: npm install
+#       - run: sudo apt-get install xvfb
+#       # - run: xvfb-run --auto-servernum npm test
+#         with:
+#           activate-environment: paraText
+#           environment-file: environment.yml
+#       - run: python test/unit/test_class_funcs.py
+
 jobs:
-   class_functions:
-     runs-on: ubuntu-latest
-#     defaults:
-#       run:
-#         shell: bash -l {0}
-     steps:
-       - uses: actions/checkout@v3
-       - uses: conda-incubator/setup-miniconda@v2
-       - run: npm install
-       - run: sudo apt-get install xvfb
-       # - run: xvfb-run --auto-servernum npm test
-         with:
-           activate-environment: paraText
-           environment-file: environment.yml
-       - run: python test/unit/test_class_funcs.py
+  build:
+    env:
+      DISPLAY: :0
+  steps:
+    - name: Setup xvfb (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xinput0 libxcb-xfixes0
+        # start xvfb in the background
+        sudo /usr/bin/Xvfb $DISPLAY -screen 0 1280x1024x24 &
