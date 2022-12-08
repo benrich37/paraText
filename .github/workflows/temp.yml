@@ -27,13 +27,16 @@ jobs:
       - name: Install PyVista
         run: pip install pyvista
 
-      - name: Use PyVista
-        run: python -c "import pyvista;pyvista.Sphere().plot(screenshot='${{ matrix.os }}-sphere.png')"
+      - name: Run unit test
+        run: python test/unit/test_class_funcs.py
 
-      - uses: actions/upload-artifact@v2
-        with:
-          name: sphere
-          path: ${{ matrix.os }}-sphere.png
+#      - name: Use PyVista
+#        run: python -c "import pyvista;pyvista.Sphere().plot(screenshot='${{ matrix.os }}-sphere.png')"
+#
+#      - uses: actions/upload-artifact@v2
+#        with:
+#          name: sphere
+#          path: ${{ matrix.os }}-sphere.png
 
 # https://github.com/pyvista/setup-headless-display-action
 #jobs:
