@@ -423,6 +423,29 @@ class TestClassFuncs(TKinterTestCase):
             for s in expected_seqs:
                 self.assertTrue(s in seqs)
 
+    def test_counter(self):
+        initial = self.ex.count
+        self.assertEqual(self.ex.counter(), initial)
+        self.assertEqual(self.ex.count, initial + 1)
+
+    def test_add_tag_idcs(self):
+        ex_name = 'ex_name'
+        initial = self.ex.count
+        self.ex.add_tag_idcs(['2.0', '2.2'], self.synonyms, name='ex_name')
+        self.ex.add_tag_idcs(['2.3', '2.5'], self.synonyms)
+        self.ex.add_tag_idcs(['2.6', '2.8', '2.9', '2.11'], self.synonyms)
+        parents = [
+            self.ex.get_parent_rep_tag(ex_name),
+            self.ex.get_parent_rep_tag(str(initial)),
+            self.ex.get_parent_rep_tag(str(initial + 1)),
+        ]
+        expected_seqs = ['<Button-2>', '<Shift-Button-2>', '<Shift-Button-1>']
+        for p in parents:
+            for t in self.ex.rep_replace_tags[p]:
+                seqs = self.ex.tag_bind(t, None, None)
+                for s in expected_seqs:
+                    self.assertTrue(s in seqs)
+
 
 if __name__ == '__main__':
     unittest.main()
