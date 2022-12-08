@@ -7,7 +7,7 @@ on:
       branches: [display_test]
 
 jobs:
-   code_style:
+   class_functions:
      runs-on: ubuntu-latest
      defaults:
        run:
