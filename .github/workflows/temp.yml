@@ -1,0 +1,21 @@
+name: Temp
+
+on:
+  push:
+      branches: [display_test]
+  pull_request:
+      branches: [display_test]
+
+jobs:
+   code_style:
+     runs-on: ubuntu-latest
+     defaults:
+       run:
+         shell: bash -l {0}
+     steps:
+       - uses: actions/checkout@v3
+       - uses: conda-incubator/setup-miniconda@v2
+         with:
+           activate-environment: paraText
+           environment-file: environment.yml
+       - run: pycodestyle $(git ls-files "*.py")
