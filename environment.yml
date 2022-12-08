@@ -4,5 +4,5 @@ channels:
 dependencies:
   - pycodestyle
   - numpy
-  - python=3.10-tk
+  - python3.10-tk
   - tk
