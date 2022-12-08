@@ -4,4 +4,4 @@ channels:
 dependencies:
   - pycodestyle
   - numpy
-  - tkinter
+  - python=latest
