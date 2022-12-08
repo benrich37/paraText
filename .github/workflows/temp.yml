@@ -14,29 +14,16 @@ jobs:
 #        os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-#      - name: Checkout
-#        uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v2
 
       - name: Setup headless display
         uses: pyvista/setup-headless-display-action@v1
 
-      - name: miniconda
-      - uses: actions/checkout@v2
-      - uses: conda-incubator/setup-miniconda@v2
+      - name: Setup Python
+        uses: actions/setup-python@v1
         with:
-          activate-environment: paraText
-          environment-file: environment.yml
-      - run: python test/unit/test_class_funcs.py
+          python-version: 3.9
 
-
-
-#      - name: Setup Python
-#        uses: actions/setup-python@v1
-#        with:
-#          python-version: 3.9
-#
-#      - name: Install PyVista
-#        run: pip install pyvista
-
-#      - name: Run unit test
-#        run: python test/unit/test_class_funcs.py
+      - name: Run unit test
+        run: python test/unit/test_class_funcs.py
