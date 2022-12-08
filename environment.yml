@@ -6,3 +6,8 @@ dependencies:
   - numpy
   - python=3.10
   - tk
+  - conda-forge tk
+  - conda-forge/label/gcc7 tk
+  - conda-forge/label/broken tk
+  - conda-forge/label/cf201901 tk
+  - conda-forge/label/cf202003 tk
