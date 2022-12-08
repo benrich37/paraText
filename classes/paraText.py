@@ -72,6 +72,7 @@ class paraText(tk.Text):
         self.widget_holder = None
         self.focus_set()
         self.bind('<Button-1>', lambda e: self.focus_set())
+        self.count = 100
 
     ###
     ############
@@ -525,7 +526,7 @@ class paraText(tk.Text):
 
     def append_child_tags(self, parent_tag, child_tag):
         """
-        :param (str) parent_tag: Parent tag who's child list we're append
+        :param (str) parent_tag: Parent tag who's child list we're appending
         :param (str) child_tag: Child tag we're appending
         :return:
         """
@@ -561,3 +562,40 @@ class paraText(tk.Text):
                          bound2
                          )
         self.setup_rep_bind_tag(parent_tag)
+
+    def counter(self):
+        """ Counter for giving all parents a new name if none is given
+        returns: (int) the current count number
+        """
+        self.count += 1
+        return self.count - 1
+
+    def add_tag_idcs(self, idcs_list, opt_list, name=None, sync=None):
+        """
+        :param (list of str) idcs_list: List of char idcs to use as bounds
+        :param (list of str) opt_list: List of options to store under parent
+        :param (str) name: Name to use for storing (autogenerates int of None)
+        :param (bool) sync: Whether to sync the children by default
+        """
+        # if len(idcs_list) % 2 = 1:
+        #     raise Error
+        if name is None:
+            name = str(self.counter())
+        parent_tag = self.get_parent_rep_tag(name)
+        synctag = self.interp_sync_arg(sync)
+        self.append_options(parent_tag, opt_list)
+        start_id = self.get_init_rep_id(name)
+        for i in range(int(len(idcs_list) / 2)):
+            ctag_i = self.get_child_rep_tag(start_id + i,
+                                            synctag,
+                                            name)
+            self.append_child_tags(parent_tag, ctag_i)
+            self.tag_add(ctag_i,
+                         idcs_list[(2 * i)],
+                         idcs_list[(2 * i) + 1]
+                         )
+        self.setup_rep_bind_tag(parent_tag)
+
+
+
+
