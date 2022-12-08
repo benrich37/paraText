@@ -5,3 +5,4 @@ dependencies:
   - pycodestyle
   - numpy
   - python=3.10
+  - tk
