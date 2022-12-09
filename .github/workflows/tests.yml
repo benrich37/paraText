@@ -50,7 +50,7 @@ jobs:
           cd unit
           python -m unittest test_utils |
 #          python -m unittest test_class_funcs
-  class function unit test:
+  class_function_unit_test:
     strategy:
       matrix:
          os: [macos-latest, ubuntu-latest, windows-latest]
