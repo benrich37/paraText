@@ -34,7 +34,7 @@ jobs:
 #           environment-file: environment.yml
 #       - run: bash test_search_cutoff.sh
 
-  unit_tests:
+  util_unit_tests:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -48,7 +48,7 @@ jobs:
       - run: |
           cd test
           cd unit
-          python -m unittest test_utils |
+          python -m unittest test_utils
   class_function_unit_test:
     strategy:
       matrix:
