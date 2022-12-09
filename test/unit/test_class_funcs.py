@@ -9,6 +9,9 @@ sys.path.append(mainpath)
 from classes import paraText
 from libs import utils
 from libs import event_gen
+# if os.environ.get('DISPLAY','') == '':
+#     # print('no display found. Using :0.0')
+#     os.environ.__setitem__('DISPLAY', ':0.0')
 
 # Follow this
 # stackoverflow.com/questions/4083796/how-do-i-run-unittest-on-a-tkinter-app
