@@ -49,7 +49,6 @@ jobs:
           cd test
           cd unit
           python -m unittest test_utils |
-#          python -m unittest test_class_funcs
   class_function_unit_test:
     strategy:
       matrix:
