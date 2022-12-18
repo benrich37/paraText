@@ -105,6 +105,15 @@ class paraText(tk.Text):
     def change_highlight_neg(self, event, widget):
         widget.config(background=self.neg_click_color)
 
+    def add_to_widget_holder(self, widget):
+        if not self.widget_holder is None:
+            utils.del_fn(self.widget_holder)
+            self.widget_holder = None
+            self.add_to_widget_holder(widget)
+        else:
+            self.widget_holder = widget
+
+
     def clear_widget_holder(self):
         """ Deletes whatever widget was put in the class widget holder
         :return:
@@ -398,7 +407,8 @@ class paraText(tk.Text):
         frame.grid_configure()
         frame.place(x=event.x, y=event.y)
         frame.focus_set()
-        self.widget_holder = frame
+        self.add_to_widget_holder(frame)
+        # self.widget_holder = frame
         frame.bind('<FocusOut>', lambda e: self.clear_widget_holder())
         self.update_idletasks()
 
@@ -455,7 +465,8 @@ class paraText(tk.Text):
         frame.focus_set()
         frame.bind('<FocusOut>', lambda e: utils.del_fn(e.widget))
         self.update_idletasks()
-        self.widget_holder = frame
+        #self.widget_holder = frame
+        self.add_to_widget_holder(frame)
 
     def gen_changing_typebox(self, event, attacker_tag):
 
