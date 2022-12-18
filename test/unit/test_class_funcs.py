@@ -101,7 +101,7 @@ class TestClassFuncs(TKinterTestCase):
                                                              str(sync),
                                                              pattern)
                          )
-
+#
     def test_parse_child_rep_tag(self):
         idx = 1
         sync = True
@@ -135,12 +135,12 @@ class TestClassFuncs(TKinterTestCase):
     def test_change_child_tag_sync_flag(self):
         self.ex.tag_add(self.sample_rep_s1, "1.0", "1.5")
         self.ex.append_child_tags(self.sample_parent, self.sample_rep_s1)
-        self.assertEqual(self.ex.rep_replace_tags[self.sample_parent][0],
+        self.assertEqual(self.ex.directory[self.sample_parent][1][0],
                          self.sample_rep_s1)
         self.ex.change_child_tag_sync_flag(self.sample_rep_s1,
                                            self.ex.syncFalse,
                                            self.sample_parent)
-        self.assertEqual(self.ex.rep_replace_tags[self.sample_parent][0],
+        self.assertEqual(self.ex.directory[self.sample_parent][1][0],
                          self.sample_rep_u1)
 
     def test_append_options(self):
@@ -148,17 +148,17 @@ class TestClassFuncs(TKinterTestCase):
         parent_tag = self.ex.get_parent_rep_tag(pattern)
         opt_list = self.synonyms
         # Should raise key error before option list is added to the system
-        self.assertRaises(KeyError, lambda: self.ex.replace_tags[parent_tag])
+        self.assertRaises(KeyError, lambda: self.ex.directory[parent_tag])
         self.ex.append_options(parent_tag, opt_list)
         # length of option list should match length of provided option list
-        self.assertEqual(len(opt_list), len(self.ex.replace_tags[parent_tag]))
+        self.assertEqual(len(opt_list), len(self.ex.directory[parent_tag][0]))
         # Making sure all options got added
         for o in opt_list:
-            self.assertTrue(o in self.ex.replace_tags[parent_tag])
+            self.assertTrue(o in self.ex.directory[parent_tag][0])
         self.ex.append_options(parent_tag, opt_list)
         # Making sure options only appear once
         for o in opt_list:
-            self.assertEqual(self.ex.replace_tags[parent_tag].count(o), 1)
+            self.assertEqual(self.ex.directory[parent_tag][0].count(o), 1)
 
     def test_get_init_rep_id(self):
         pattern = self.synonyms[0]
@@ -166,8 +166,8 @@ class TestClassFuncs(TKinterTestCase):
         opt_list = self.synonyms
         self.assertEqual(0, self.ex.get_init_rep_id(pattern))
         self.ex.add_tag_rep(pattern, opt_list)
-        self.assertEqual(len(self.ex.rep_replace_tags[parent_tag]),
-                         self.ex.get_init_rep_id(pattern))
+        self.assertEqual(len(self.ex.directory[parent_tag][1]),
+                         self.ex.get_last_rep_id(pattern))
 
     def test_get_last_rep_id(self):
         pattern = self.synonyms[0]
@@ -175,20 +175,20 @@ class TestClassFuncs(TKinterTestCase):
         opt_list = self.synonyms
         self.assertEqual(0, self.ex.get_init_rep_id(pattern))
         self.ex.add_tag_rep(pattern, opt_list)
-        self.assertEqual(len(self.ex.rep_replace_tags[parent_tag]) - 1,
+        self.assertEqual(len(self.ex.directory[parent_tag][1]),
                          self.ex.get_last_rep_id(pattern))
 
     def test_append_child_tags(self):
         self.assertRaises(KeyError,
-                          lambda: self.ex.rep_replace_tags[self.sample_parent])
+                          lambda: self.ex.directory[self.sample_parent][1])
         self.ex.append_child_tags(self.sample_parent, self.sample_rep_s1)
-        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent],
+        self.assertListEqual(self.ex.directory[self.sample_parent][1],
                              [self.sample_rep_s1])
         self.ex.append_child_tags(self.sample_parent, self.sample_rep_s1)
-        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent],
+        self.assertListEqual(self.ex.directory[self.sample_parent][1],
                              [self.sample_rep_s1])
         self.ex.append_child_tags(self.sample_parent, self.sample_rep_u1)
-        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent],
+        self.assertListEqual(self.ex.directory[self.sample_parent][1],
                              [self.sample_rep_s1,
                               self.sample_rep_u1])
 
@@ -210,7 +210,8 @@ class TestClassFuncs(TKinterTestCase):
             self.ex.tag_add(ctag_i,
                             bound1,
                             bound2)
-        attacker_tags = self.ex.rep_replace_tags[parent_tag]
+        # attacker_tags = self.ex.rep_replace_tags[parent_tag]
+        attacker_tags = self.ex.directory[parent_tag][1]
         attacker_tag = attacker_tags[0]
         ####
 
@@ -243,8 +244,8 @@ class TestClassFuncs(TKinterTestCase):
         self.ex.add_tag_rep(pattern, opt_list)
         self.assertEqual(self.root.winfo_children()[-1].winfo_class(),
                          self.ex.winfo_class())
-        target_tags = self.ex.rep_replace_tags[parent_tag]
-        attacker_tag = self.ex.rep_replace_tags[parent_tag][0]
+        target_tags = self.ex.directory[parent_tag][1]
+        attacker_tag = target_tags[0]
         self.ex.gen_options(
             # self.ex_event is defined in the class setup, so interpreters
             # might have trouble recognizing its existence below
@@ -275,7 +276,7 @@ class TestClassFuncs(TKinterTestCase):
         ex_frame = ttk.Frame(self.ex.master)
         ex_opt = self.ex.new_option(ex_frame,
                                     ex_parent,
-                                    self.ex.rep_replace_tags[ex_parent],
+                                    self.ex.directory[ex_parent][1],
                                     1)
         ex_opt.grid(row=0, column=1, sticky=tk.W)
         ex_frame.place(x=10, y=10)
@@ -335,19 +336,18 @@ class TestClassFuncs(TKinterTestCase):
     def test_change_sync_worker(self):
         self.ex.append_child_tags(self.sample_parent, self.sample_rep_s1)
         self.ex.append_child_tags(self.sample_parent, self.sample_rep_u2)
-        # self.ex.append_child_tags(self.sample_parent, self.sample_iso)
         self.ex.tag_add(self.sample_rep_s1, '2.0', '2.10')
         self.ex.tag_add(self.sample_rep_u2, '2.10', '2.20')
-        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent],
+        self.assertListEqual(self.ex.directory[self.sample_parent][1],
                              [self.sample_rep_s1, self.sample_rep_u2])
         self.ex.change_sync_worker(self.sample_rep_s1, self.sample_parent)
-        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent],
+        self.assertListEqual(self.ex.directory[self.sample_parent][1],
                              [self.sample_rep_u1, self.sample_rep_u2])
         self.ex.change_sync_worker(self.sample_rep_u2, self.sample_parent)
-        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent],
+        self.assertListEqual(self.ex.directory[self.sample_parent][1],
                              [self.sample_rep_u1, self.sample_rep_s2])
         self.ex.change_sync_worker(self.sample_rep_s2, self.sample_parent)
-        self.assertListEqual(self.ex.rep_replace_tags[self.sample_parent],
+        self.assertListEqual(self.ex.directory[self.sample_parent][1],
                              [self.sample_rep_u1, self.sample_rep_u2])
 
     def test_replace_text(self):
@@ -396,7 +396,7 @@ class TestClassFuncs(TKinterTestCase):
                             self.synonyms,
                             sync=self.ex.syncTrue)
         expected_seqs = ['<Button-2>', '<Shift-Button-2>', '<Shift-Button-1>']
-        for t in self.ex.rep_replace_tags[ex_parent]:
+        for t in self.ex.directory[ex_parent][1]:
             seqs = self.ex.tag_bind(t, None, None)
             for s in expected_seqs:
                 self.assertTrue(s in seqs)
@@ -413,15 +413,15 @@ class TestClassFuncs(TKinterTestCase):
 
     def test_setup_rep_bind_tag(self):
         # set up the parent/children in memory
-        self.ex.rep_replace_tags[self.sample_parent] = [self.sample_rep_s1,
-                                                        self.sample_rep_s2]
+        self.ex.directory[self.sample_parent] = [[],[self.sample_rep_s1,
+                                                     self.sample_rep_s2]]
         # Make sure each child tag is actually tagged in the text
         self.ex.tag_add(self.sample_rep_s1, '1.1')
         self.ex.tag_add(self.sample_rep_s2, '1.2')
         self.ex.setup_rep_bind_tag(self.sample_parent)
         # Perform same passing metric as written for add_tag_rep
         expected_seqs = ['<Button-2>', '<Shift-Button-2>', '<Shift-Button-1>']
-        for t in self.ex.rep_replace_tags[self.sample_parent]:
+        for t in self.ex.directory[self.sample_parent][1]:
             seqs = self.ex.tag_bind(t, None, None)
             for s in expected_seqs:
                 self.assertTrue(s in seqs)
@@ -444,11 +444,11 @@ class TestClassFuncs(TKinterTestCase):
         ]
         expected_seqs = ['<Button-2>', '<Shift-Button-2>', '<Shift-Button-1>']
         for p in parents:
-            for t in self.ex.rep_replace_tags[p]:
+            for t in self.ex.directory[p][1]:
                 seqs = self.ex.tag_bind(t, None, None)
                 for s in expected_seqs:
                     self.assertTrue(s in seqs)
-
+#
 
 if __name__ == '__main__':
     unittest.main()

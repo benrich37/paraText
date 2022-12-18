@@ -61,10 +61,15 @@ class paraText(tk.Text):
         # if tag has the iso flag, that tag is the tag used
         # if tag has the rep flag, look in rep_replace_tags for all tags
         # actually used (each tag must be unique)
-        self.replace_tags = {}
-        # rep_replace_tags is a dictionary with all the parent rep tags being used, and the key values are all the
-        # child rep tags being used
-        self.rep_replace_tags = {}
+        # self.replace_tags = {}
+        # # rep_replace_tags is a dictionary with all the parent rep tags being used, and the key values are all the
+        # # child rep tags being used
+        # self.rep_replace_tags = {}
+        # This will be an all encompassing directory for a parent, which will
+        # instead map a family name to
+        # FIRST the list of options, and
+        # SECOND the list of child tagnames
+        self.directory = {}
         # whether setting up rep tags will default to sync them together or not
         self.default_sync = self.syncTrue
         # May delete later - this is just a temporary variable to store in the paraText class so that particular widgets
@@ -196,11 +201,14 @@ class paraText(tk.Text):
         :return last_rep_id: Integer of most recently added child ID
         """
         ids = []
-        rep_ids = self.rep_replace_tags[self.get_parent_rep_tag(pattern)]
+        rep_ids = self.directory[self.get_parent_rep_tag(pattern)][1]
         for id in rep_ids:
             id_i = self.parse_child_rep_tag(id)[0]
             ids.append(id_i)
-        last_rep_id = max(ids)
+        if len(ids) == 0:
+            last_rep_id = 0
+        else:
+            last_rep_id = max(ids)
         return last_rep_id
 
     def get_init_rep_id(self, pattern):
@@ -209,7 +217,11 @@ class paraText(tk.Text):
         :return start_id: Integer of child ID to use for first appended child
         """
         parent_tag = self.get_parent_rep_tag(pattern)
-        if parent_tag not in self.rep_replace_tags:
+        # if parent_tag not in self.rep_replace_tags:
+        #     start_id = 0
+        # else:
+        #     start_id = self.get_last_rep_id(pattern) + 1
+        if parent_tag not in self.directory:
             start_id = 0
         else:
             start_id = self.get_last_rep_id(pattern) + 1
@@ -229,10 +241,15 @@ class paraText(tk.Text):
         :param opt_list: List of strings to be added to the tags option list
         :return None:
         """
-        if tag not in self.replace_tags:
-            self.replace_tags[tag] = []
+        # if tag not in self.replace_tags:
+        #     self.replace_tags[tag] = []
+        # for i in range(len(opt_list)):
+        #     utils.append_no_dup(opt_list[i], self.replace_tags[tag])
+
+        if tag not in self.directory:
+            self.directory[tag] = [[],[]]
         for i in range(len(opt_list)):
-            utils.append_no_dup(opt_list[i], self.replace_tags[tag])
+            utils.append_no_dup(opt_list[i], self.directory[tag][0])
 
     def get_synced_tags(self, given_tags):
         """
@@ -293,8 +310,8 @@ class paraText(tk.Text):
         """
         idx, old_sync, pattern = self.parse_child_rep_tag(oldtag)
         newtag = self.get_child_rep_tag(idx, new_sync_flag, pattern)
-        place_in_list = self.rep_replace_tags[parent_tag].index(oldtag)
-        self.rep_replace_tags[parent_tag][place_in_list] = newtag
+        place_in_list = self.directory[parent_tag][1].index(oldtag)
+        self.directory[parent_tag][1][place_in_list] = newtag
         bounds = self.tag_ranges(oldtag)
         self.tag_delete(oldtag)
         self.tag_add(newtag, bounds[0], bounds[1])
@@ -323,13 +340,13 @@ class paraText(tk.Text):
         """
         :param (Widget) frame: The widget holding all the new options
         :param (str) parent_tag: The tagname of the target's parent
-        :param (str) target_tags: The tags which will have their text changed
+        :param (list[str]) target_tags: The tags which will have their text changed
         :param (int) opt_idx: An int referring to which option from the option
                                  list this widget will refer to
         :return (Widget) new_opt: The label widget which will trigger a change
                                      to the specified option
         """
-        opt_list = self.replace_tags[parent_tag]
+        opt_list = self.directory[parent_tag][0]
         new_opt = tk.Label(master=frame,
                            text=opt_list[opt_idx],
                            borderwidth=1,
@@ -361,12 +378,12 @@ class paraText(tk.Text):
         :param     (Event) event: Event which triggered the function
                                      (A right click on some tagged text)
         :param       (str) parent_tag: parent tagname of tagged selection
-        :param       (str) target_tags: tagnames of selections to be changed
+        :param       (list[str]) target_tags: tagnames of selections to be changed
         :param       (str) attacker_tag: tagname of the selection clicked on
         :returns: (action) Generates a list of clickable options to replace
                               text within the document
         """
-        opt_list = self.replace_tags[parent_tag]
+        opt_list = self.directory[parent_tag][0]
         frame = ttk.Frame(self.master)
         opt_boxes = []
         for i in range(len(opt_list)):
@@ -513,7 +530,7 @@ class paraText(tk.Text):
         # command is executed
         # synced_tags indicate tags which are synced to each other
         # (all bound replace commands will replace all other synced tags)
-        attacker_tags = self.rep_replace_tags[parent_tag]
+        attacker_tags = self.directory[parent_tag][1]
         syncd_tags = self.get_synced_tags(attacker_tags)
         for i in range(len(attacker_tags)):
             if attacker_tags[i] in syncd_tags:
@@ -530,9 +547,9 @@ class paraText(tk.Text):
         :param (str) child_tag: Child tag we're appending
         :return:
         """
-        if parent_tag not in self.rep_replace_tags:
-            self.rep_replace_tags[parent_tag] = []
-        utils.append_no_dup(child_tag, self.rep_replace_tags[parent_tag])
+        if parent_tag not in self.directory:
+            self.directory[parent_tag] = [[],[]]
+        utils.append_no_dup(child_tag, self.directory[parent_tag][1])
 
     def add_tag_rep(self, pattern, opt_list, sync=None):
         """
@@ -577,8 +594,6 @@ class paraText(tk.Text):
         :param (str) name: Name to use for storing (autogenerates int of None)
         :param (bool) sync: Whether to sync the children by default
         """
-        # if len(idcs_list) % 2 = 1:
-        #     raise Error
         if name is None:
             name = str(self.counter())
         parent_tag = self.get_parent_rep_tag(name)
