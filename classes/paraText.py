@@ -6,7 +6,7 @@ import copy
 
 
 class paraText(tk.Text):
-    # String variables which will be called when constructing tag strings
+    # String variables which will be called when constructing family_name strings
     repFlag = "_REP_"
     isoFlag = "_ISO_"
     repIdFlag = "_CNT_"
@@ -35,14 +35,14 @@ class paraText(tk.Text):
 
     # Example tagnames
     # _ISO_blahblah
-    ## a tag with surface text blahblah that is only expected to appear once
+    ## a family_name with surface text blahblah that is only expected to appear once
     # _REP_12_CNT_FALSE_SNC_blahblah
-    ## a tag with surface text blahblah with personal id '12' and
+    ## a family_name with surface text blahblah with personal id '12' and
     ## requests no sync
     # _REP_3_CNT_TRUE_SNC_blahblah
-    ## a tag with surface text blahblah with personal id '3' and requests sync
-    ### (a change to another tag with the same surface pattern will trigger a
-    ### change to this tag, and vice versa)
+    ## a family_name with surface text blahblah with personal id '3' and requests sync
+    ### (a change to another family_name with the same surface pattern will trigger a
+    ### change to this family_name, and vice versa)
 
     # https://htmlcolorcodes.com/color-picker/
     default_color = "#FF5E3B"
@@ -58,9 +58,9 @@ class paraText(tk.Text):
         tk.Widget.__init__(self, master, 'text', cnf, kw)
         # replace_tags is a dictionary with tags, key values being the options possible
         ## replace_tags will only have iso tags and parent rep tags
-        # if tag has the iso flag, that tag is the tag used
-        # if tag has the rep flag, look in rep_replace_tags for all tags
-        # actually used (each tag must be unique)
+        # if family_name has the iso flag, that family_name is the family_name used
+        # if family_name has the rep flag, look in rep_replace_tags for all tags
+        # actually used (each family_name must be unique)
         # self.replace_tags = {}
         # # rep_replace_tags is a dictionary with all the parent rep tags being used, and the key values are all the
         # # child rep tags being used
@@ -69,7 +69,10 @@ class paraText(tk.Text):
         # instead map a family name to
         # FIRST the list of options, and
         # SECOND the list of child tagnames
+        # THIRD the list of child bounds
         self.directory = {}
+        # For remembering bounds of children
+        self.child_bounds = {}
         # whether setting up rep tags will default to sync them together or not
         self.default_sync = self.syncTrue
         # May delete later - this is just a temporary variable to store in the paraText class so that particular widgets
@@ -88,7 +91,7 @@ class paraText(tk.Text):
     ### vvv
 
     def get_replace_type_color(self, tag):
-        # give a tag, return the designated color for the tag type
+        # give a family_name, return the designated color for the family_name type
         replace_type = self.get_replace_type(tag)
         return self.replace_type_dict[replace_type]
 
@@ -122,6 +125,18 @@ class paraText(tk.Text):
         utils.del_fn(self.widget_holder)
         self.widget_holder = None
 
+
+    def update_child_bounds(self):
+        # dump any possibly outdated info
+        self.child_bounds = {}
+        for p in self.directory.items():
+            parent = p[0]
+            self.directory[parent][2] = []
+            for c in p[1][1]:
+                cur_bounds = utils.get_bounds_as_strs(self.tag_ranges(c))
+                self.directory[parent][2].append(cur_bounds)
+                # self.child_bounds[c] = tuple(cur_bounds)
+
     ###
     ############
     #########################
@@ -132,8 +147,8 @@ class paraText(tk.Text):
 
     def get_replace_type(self, tag):
         """ Extracts an informative string telling the replace type of
-               provided tag
-        :param (str) tag: tag to look at
+               provided family_name
+        :param (str) tag: family_name to look at
         :return (str) rep_type: Informative string of replace type
         """
         tag1 = tag[0:5]
@@ -146,16 +161,16 @@ class paraText(tk.Text):
             else:
                 rep_type = self.replace_types[2]
         else:
-            raise ValueError("Unexpected tag")
+            raise ValueError("Unexpected family_name")
         return rep_type
 
     def get_child_rep_tag(self, idx, sync, pattern):
-        """ Concatenates the child rep tag via given arguments and class
+        """ Concatenates the child rep family_name via given arguments and class
                variables
         :param idx: (int) child ID to use
         :param sync: (bool or str) True/False for whether its synced
-        :param pattern: (str) Pattern of parent tag
-        :return child_rep_tag: (str) String of constructed child rep tag
+        :param pattern: (str) Pattern of parent family_name
+        :return child_rep_tag: (str) String of constructed child rep family_name
         """
         child_rep_tag = self.repFlag + str(idx) + self.repIdFlag\
             + str(sync) + self.syncFlag + pattern
@@ -170,7 +185,7 @@ class paraText(tk.Text):
 
     def parse_child_rep_tag(self, rep_tag):
         """
-        :param rep_tag: (str) child rep tag to parse
+        :param rep_tag: (str) child rep family_name to parse
         :return:
         return_id (int) Child's ID;
         sync_arg (str) Sync bool as string;
@@ -196,7 +211,7 @@ class paraText(tk.Text):
     def interp_sync_arg(self, syncarg):
         """ Makes sure the syncarg given gets turned into the problem sync option flag
         :param syncarg: Boolean for if we're syncing or not
-        :return syncflag: String to be used as tag for interpreting syncing
+        :return syncflag: String to be used as family_name for interpreting syncing
         """
         if syncarg is None:
             syncflag = self.default_sync
@@ -222,7 +237,7 @@ class paraText(tk.Text):
 
     def get_init_rep_id(self, pattern):
         """ Gets ID to use for adding a child
-        :param pattern: String of pattern the parent tag is based on
+        :param pattern: String of pattern the parent family_name is based on
         :return start_id: Integer of child ID to use for first appended child
         """
         parent_tag = self.get_parent_rep_tag(pattern)
@@ -244,21 +259,21 @@ class paraText(tk.Text):
     ############ vvv
     ### vvv
 
-    def append_options(self, tag, opt_list):
-        """ Handler for adding options to a parent tag or iso tag
-        :param tag: String of tag
+    def append_options(self, family_name, opt_list):
+        """ Handler for adding options to a parent family_name or iso family_name
+        :param family_name: String of family_name
         :param opt_list: List of strings to be added to the tags option list
         :return None:
         """
-        # if tag not in self.replace_tags:
-        #     self.replace_tags[tag] = []
+        # if family_name not in self.replace_tags:
+        #     self.replace_tags[family_name] = []
         # for i in range(len(opt_list)):
-        #     utils.append_no_dup(opt_list[i], self.replace_tags[tag])
+        #     utils.append_no_dup(opt_list[i], self.replace_tags[family_name])
 
-        if tag not in self.directory:
-            self.directory[tag] = [[],[]]
+        if family_name not in self.directory:
+            self.directory[family_name] = [[], [], []]
         for i in range(len(opt_list)):
-            utils.append_no_dup(opt_list[i], self.directory[tag][0])
+            utils.append_no_dup(opt_list[i], self.directory[family_name][0])
 
     def get_synced_tags(self, given_tags):
         """
@@ -312,7 +327,7 @@ class paraText(tk.Text):
 
     def change_child_tag_sync_flag(self, oldtag, new_sync_flag, parent_tag):
         """
-        :param (str) oldtag: Child tag who's sync flag we're changing
+        :param (str) oldtag: Child family_name who's sync flag we're changing
         :param (str) new_sync_flag: Sync flag we're inserting into oldtag
         :param (str) parent_tag: Child's parent for re-tagging purposes
         :return:
@@ -415,7 +430,7 @@ class paraText(tk.Text):
     def gen_changing_typebox_get_to_fro(self, attacker_tag):
         """ Returns the current sync type and the sync type a sync change would
               create
-        :param (str) attacker_tag: The attacker tag we are looking at
+        :param (str) attacker_tag: The attacker family_name we are looking at
         :return (str) r1: Current sync type
         :return (str) r2: Upcoming sync type
         """
@@ -432,10 +447,10 @@ class paraText(tk.Text):
                 r1 = self.replace_types[2]
                 r2 = self.replace_types[1]
             else:
-                print('unexpected tag in generating changing type box')
+                print('unexpected family_name in generating changing type box')
                 sys.exit(1)
         else:
-            print('unexpected tag in generating changing type box')
+            print('unexpected family_name in generating changing type box')
             sys.exit(1)
         return r1, r2
 
@@ -552,15 +567,20 @@ class paraText(tk.Text):
                                              target_tags,
                                              parent_tag)
 
+    def append_child_tags_helper(self, parent_tag, child_tag):
+        if child_tag not in self.directory[parent_tag][1]:
+            self.directory[parent_tag][1].append(child_tag)
+            self.directory[parent_tag][2].append(utils.get_bounds_as_strs(self.tag_ranges(child_tag)))
+
     def append_child_tags(self, parent_tag, child_tag):
         """
-        :param (str) parent_tag: Parent tag who's child list we're appending
-        :param (str) child_tag: Child tag we're appending
+        :param (str) parent_tag: Parent family_name who's child list we're appending
+        :param (str) child_tag: Child family_name we're appending
         :return:
         """
         if parent_tag not in self.directory:
-            self.directory[parent_tag] = [[],[]]
-        utils.append_no_dup(child_tag, self.directory[parent_tag][1])
+            self.directory[parent_tag] = [[],[],[]]
+        self.append_child_tags_helper(parent_tag, child_tag)
 
     def add_tag_rep(self, pattern, opt_list, sync=None):
         """

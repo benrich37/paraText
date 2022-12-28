@@ -1,4 +1,7 @@
 import math
+before = 'before'
+after = 'after'
+same = 'same'
 
 
 def str_not(string):
@@ -75,6 +78,48 @@ def short_hex_to_dec(short_hex):
         return_sum += dig_dec
     return return_sum
 
+def compare_car_idcs_step2(c1, c2):
+    if c1 == c2:
+        return same
+    elif c1 < c2:
+        return after
+    else:
+        return before
+
+def compare_car_idcs_step1(car_1, car_2):
+    l1, c1 = char_idx_to_ints(car_1)
+    l2, c2 = char_idx_to_ints(car_2)
+    if l1 == l2:
+        return compare_car_idcs_step2(c1, c2)
+    else:
+        if l1 < l2:
+            return after
+        else:
+            return before
+
+def compare_care_idcs(car_1, car_2):
+    # Add error handling or whatever
+    return compare_car_idcs_step1(car_1, car_2)
+
+def conflict_bounds(cars_1, cars_2):
+    compare_first = compare_care_idcs(cars_1[0], cars_2[0])
+    compare_last = compare_care_idcs(cars_1[1], cars_2[1])
+    if compare_first == before:
+        if compare_last == after:
+            return True
+        else:
+            return False
+    if compare_first == same:
+        return True
+    if compare_first == after:
+        if compare_last == after:
+            return False
+        else:
+            return True
+
+
+
+
 
 def char_idx_to_ints(char_idx):
     """Returns the integers in a char index string
@@ -145,10 +190,10 @@ def return_matches(twidget, pattern):
 
 
 def get_text_by_tagname(twidget, tagname):
-    """Search for a tag name to find text under tag
+    """Search for a family_name name to find text under family_name
     :param (tkinter.Widget) twidget: text-widget that has some text tagged by the tagname
-    :param (str) tagname: str name of the tag you want to look for
-    :return (str) current_text: the text currently under the tag
+    :param (str) tagname: str name of the family_name you want to look for
+    :return (str) current_text: the text currently under the family_name
     """
     bounds = twidget.tag_ranges(tagname)
     if len(bounds) > 2:
@@ -160,7 +205,7 @@ def get_text_by_tagname(twidget, tagname):
 def insert_at_end(twidget, end_char_idx, insert_text):
     """Inserts a word at the end of a word and deletes the final character
     ex: if you want to insert 'Word' into 'Sentence', the end result would be
-    'SentencWord' - this way, tkinter doesn't delete the existing tag
+    'SentencWord' - this way, tkinter doesn't delete the existing family_name
     :param (tkinter.Widget) twidget: text widget you're operating on
     :param (str) end_char_idx: str char idx of where new word will be inserted
     :param (str) insert_text: text you're inserting as an str
@@ -176,7 +221,7 @@ def insert_at_end(twidget, end_char_idx, insert_text):
 
 
 def insert(twidget, tagname, newtext):
-    """Inserts new text into a specific tag name
+    """Inserts new text into a specific family_name name
     :param (tkinter.Widget) twidget: text widget you're operating on
     :param (str) tagname: tagname whose text selection to insert into as an str
     :param (str) newtext: text to insert as an str
@@ -187,7 +232,7 @@ def insert(twidget, tagname, newtext):
 
 
 def replace(twidget, tagname, newtext):
-    """Replaces text in a specific tag name
+    """Replaces text in a specific family_name name
     :param (tkinter.Widget) twidget: text widget you're operating on
     :param (str) tagname: tagname whose text you're replacing
     :param (str) newtext: text you want to replace with
@@ -212,3 +257,41 @@ def append_no_dup(item, list):
     # (used most commonly for appending options)
     if item not in list:
         list.append(item)
+
+def get_bounds_as_strs(bounds):
+    output = []
+    for i in range(len(bounds)):
+        output.append(bounds[i].string)
+    return output
+
+
+def dict_pretty(dict):
+    if type(dict) == 'dict':
+        return dict_pretty(dict.items())
+    # elif type(dict) != 'dict_items':
+    #     raise ValueError
+    return dict_pretty_handler(dict)
+
+def dict_pretty_handler(dict_items):
+    output = ''
+    indent = ''
+    aslist = list(dict_items)
+    for p in aslist:
+        return_str, indent = dict_pretty_printer(p, indent)
+        output += return_str
+    return output
+
+def dict_pretty_printer(item, indent):
+    tab = '  '
+    if type(item) == str:
+        return_str = indent + item + '\n'
+    else:
+        return_str = indent + '(list)' + '\n'
+        indent += tab
+        for i in item:
+            temp_return_str, temp_indent = dict_pretty_printer(i, indent)
+            return_str += temp_indent + temp_return_str
+    return return_str, indent
+
+
+
