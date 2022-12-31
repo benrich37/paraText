@@ -70,6 +70,7 @@ class paraText(tk.Text):
         # FIRST the list of options, and
         # SECOND the list of child tagnames
         # THIRD the list of child bounds
+        # FOURTH the current text of the child
         self.directory = {}
         # For remembering bounds of children
         self.child_bounds = {}
@@ -90,11 +91,6 @@ class paraText(tk.Text):
     ############ vvv
     ### vvv
 
-    def get_replace_type_color(self, tag):
-        # give a family_name, return the designated color for the family_name type
-        replace_type = self.get_replace_type(tag)
-        return self.replace_type_dict[replace_type]
-
 
     # Bunch of functions to change widget backgrounds to class variable colors
     def change_highlight_default(self, event, widget):
@@ -107,6 +103,21 @@ class paraText(tk.Text):
         widget.config(background=self.down_click_color)
     def change_highlight_neg(self, event, widget):
         widget.config(background=self.neg_click_color)
+
+    def get_replace_type_color(self, tag):
+        # give a family_name, return the designated color for the family_name type
+        replace_type = self.get_replace_type(tag)
+        return self.replace_type_dict[replace_type]
+
+
+    ###
+    ############
+    #########################
+    ##### MEMORY FUNCTIONS ####################
+    ######################### vvv
+    ############ vvv
+    ### vvv
+
 
     def add_to_widget_holder(self, widget):
         if not self.widget_holder is None:
@@ -126,16 +137,22 @@ class paraText(tk.Text):
         self.widget_holder = None
 
 
-    def update_child_bounds(self):
-        # dump any possibly outdated info
-        self.child_bounds = {}
-        for p in self.directory.items():
-            parent = p[0]
-            self.directory[parent][2] = []
-            for c in p[1][1]:
-                cur_bounds = utils.get_bounds_as_strs(self.tag_ranges(c))
-                self.directory[parent][2].append(cur_bounds)
-                # self.child_bounds[c] = tuple(cur_bounds)
+    def update_bounds(self, child_tag, parent):
+        cur_bounds = utils.get_bounds_as_strs(self.tag_ranges(child_tag))
+        self.directory[parent][2].append(cur_bounds)
+
+    def update_current_text(self, child_tag, parent):
+        cur_text = utils.get_text_by_tagname(self, child_tag)
+        self.directory[parent][3].append(cur_text)
+
+    def update_directory(self):
+        for fam in self.directory.items():
+            fam_name = fam[0]
+            self.directory[fam_name][2] = []
+            self.directory[fam_name][3] = []
+            for child_tag in fam[1][1]:
+                self.update_bounds(child_tag, fam_name)
+                self.update_current_text(child_tag, fam_name)
 
     ###
     ############
@@ -271,7 +288,7 @@ class paraText(tk.Text):
         #     utils.append_no_dup(opt_list[i], self.replace_tags[family_name])
 
         if family_name not in self.directory:
-            self.directory[family_name] = [[], [], []]
+            self.directory[family_name] = [[], [], [], []]
         for i in range(len(opt_list)):
             utils.append_no_dup(opt_list[i], self.directory[family_name][0])
 
