@@ -4,7 +4,7 @@ from tkinter import ttk
 from libs import utils
 import sys
 import copy
-from classes import paraText
+from classes import paraText, editor
 from libs import utils
 
 class paraTxt(tk.Tk):
@@ -17,11 +17,11 @@ class paraTxt(tk.Tk):
         super().__init__()
         self.title('paraTxt')
         self.geometry('1300x600')
-        self.widget_paraText = paraText.paraText(wrap=tk.WORD,
-                                                 font=("Arial", 18),
-                                                 width=40, border=0)
-        self.widget_paraText.grid(column=0, row=1, padx=self.pt_padx,
-                                  pady=self.pt_pady)
+        self.w_pT = paraText.paraText(wrap=tk.WORD,
+                                      font=("Arial", 18),
+                                      width=40, border=0)
+        self.w_pT.grid(column=0, row=1, padx=self.pt_padx,
+                       pady=self.pt_pady)
         self.spawner_color = None
         self.edit_data = False
         self.dropdown_spawner = None
@@ -61,8 +61,8 @@ class paraTxt(tk.Tk):
         :param bounds: List of two char indices
         :return bool, child_tag:
         """
-        self.widget_paraText.update_child_bounds()
-        ref = self.widget_paraText.child_bounds.items()
+        self.w_pT.update_directory()
+        ref = self.w_pT.child_bounds.items()
         for c in ref:
             if utils.conflict_bounds(bounds, c[1]):
                 return True, c[0]
@@ -70,7 +70,7 @@ class paraTxt(tk.Tk):
 
 
     def create_instance(self):
-        bounds = self.widget_paraText.tag_ranges(tk.SEL)
+        bounds = self.w_pT.tag_ranges(tk.SEL)
         ret_val = self.check_bounds_conflict(bounds)
 
     def instance_creation(self, event):
@@ -82,58 +82,11 @@ class paraTxt(tk.Tk):
         op1.grid(column=1, row=1)
         op2 = tk.Label(window, text='Add to Existing Family...')
         op2.grid(column=1, row=2)
-        op2.bind('<Button-1>', lambda e: self.family_editor())
-
-
-    def family_editor(self):
-        window = tk.Toplevel(self)
-        window.geometry('400x200')
-        window.title('family_editor')
-        self.family_gridder(window)
-
-    def grid_label(self, master, text, row, column):
-        tk.Label(master, text=text, borderwidth=1, relief='solid').grid(row=row, column=column)
-
-    def grid_title(self, master, text, row, column):
-        tk.Label(master, text=text).grid(row=row, column=column)
-
-    def grid_block(self, master, x0, xw, y0, yw, color):
-        tk.Label(master, text='.'*2500, background=color, highlightbackground=color, height=1, font=("Arial", 1)).grid(row=y0, rowspan=yw, column=x0, columnspan=xw)
-
-    def family_gridder(self, window):
-        offx = 0
-        offy = 2
-        self.grid_title(window, 'Family name', 0, 0 + offx)
-        self.grid_title(window, 'Options', 0, 1 + offx)
-        self.grid_title(window, 'Existing Children', 0, 2 + offx)
-        self.grid_title(window, 'Children Bounds', 0, 3 + offx)
-        self.grid_block(window, 0, 4 + offx, 1, 1, 'black')
-        self.widget_paraText.update_child_bounds()
-        pr = 0
-        for p in self.widget_paraText.directory.items():
-            # Family label
-            self.grid_label(window, p[0], pr + offy, 0 + offx)
-            # option labels
-            for i in range(len(p[1][0])):
-                self.grid_label(window, p[1][0][i], pr + i + offy, 1 + offx)
-            # Children labels
-            for i in range(len(p[1][1])):
-                self.grid_label(window, p[1][1][i], pr + i + offy, 2 + offx)
-            # Children bounds
-            for i in range(len(p[1][2])):
-                self.grid_label(window, p[1][2][i], pr + i + offy, 3 + offx)
-            # Find how many rows the family is occupying before starting next one
-            row_max = 0
-            for i in range(3):
-                row_max = max(row_max, len(p[1][i]))
-            pr += row_max
-
-
-
+        op2.bind('<Button-1>', lambda e: editor.editor(self, mode=1))
 
 
     def setup_editor(self):
-        self.widget_paraText.tag_bind(tk.SEL, '<Button-2>', lambda e: self.instance_creation(e))
+        self.w_pT.tag_bind(tk.SEL, '<Button-2>', lambda e: self.instance_creation(e))
 
     def setup_dataview(self):
         if self.dataview_bool:
@@ -258,7 +211,7 @@ class paraTxt(tk.Tk):
     #
 
     def set_read_only(self):
-        self.widget_paraText.config(state=tk.DISABLED)
+        self.w_pT.config(state=tk.DISABLED)
         self.clear_dropdown_holder()
 
     def setup_edit_mode_readonly(self, frame):
@@ -266,7 +219,7 @@ class paraTxt(tk.Tk):
         option.bind('<Button-1>', lambda e: self.set_read_only())
 
     def set_edit_text(self):
-        self.widget_paraText.config(state=tk.NORMAL)
+        self.w_pT.config(state=tk.NORMAL)
         self.clear_dropdown_holder()
 
     def setup_edit_mode_edit_txt(self, frame):
@@ -274,7 +227,7 @@ class paraTxt(tk.Tk):
         option.bind('<Button-1>', lambda e: self.set_edit_text())
 
     def set_edit_text_and_date(self):
-        self.widget_paraText.config(state=tk.NORMAL)
+        self.w_pT.config(state=tk.NORMAL)
         self.clear_dropdown_holder()
 
     def setup_edit_mode_edit_data(self, frame):
@@ -286,8 +239,8 @@ class paraTxt(tk.Tk):
         self.setup_dataview()
 
     def get_paraText_data(self):
-        self.widget_paraText.update_child_bounds()
-        return self.widget_paraText.directory.items()
+        self.w_pT.update_directory()
+        return self.w_pT.directory.items()
 
 
 
