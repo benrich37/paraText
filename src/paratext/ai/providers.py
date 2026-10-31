@@ -1,0 +1,279 @@
+"""Provider-agnostic text completion backends.
+
+Every backend implements ``Provider.complete(system, prompt, json_schema=None) -> str``.
+Three kinds cover most ways a user can reach a model:
+
+- ``OpenAICompatibleProvider``: any server speaking the OpenAI chat-completions
+  protocol (OpenAI, Google Gemini's OpenAI endpoint, OpenRouter, Groq, Together,
+  Mistral, local Ollama / LM Studio / vLLM, ...).  Uses only the stdlib.
+- ``AnthropicProvider``: Claude via the official ``anthropic`` SDK (optional extra).
+- ``CommandProvider``: shells out to a CLI that is already signed in with the
+  user's *subscription* (e.g. Claude Code ``claude -p``, OpenAI ``codex exec``,
+  Google ``gemini``), so no API key is needed.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shlex
+import subprocess
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+
+
+class ProviderError(RuntimeError):
+    """A provider could not produce a completion (bad config, network, refusal, ...)."""
+
+
+class Provider:
+    """Base class: a named text-completion backend."""
+
+    #: human-readable identifier, also part of the cache key
+    name: str = "provider"
+
+    def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
+        """Return the model's text reply.
+
+        :param system: system / instruction prompt
+        :param prompt: user prompt
+        :param json_schema: if given, the caller expects a JSON object matching
+            this schema.  Backends that support constrained output use it;
+            others rely on the prompt asking for JSON.
+        """
+        raise NotImplementedError
+
+    @property
+    def cache_key(self) -> str:
+        return self.name
+
+
+def _resolve_api_key(api_key: str | None, api_key_env: str | None, required: bool) -> str | None:
+    if api_key:
+        return api_key
+    if api_key_env:
+        value = os.environ.get(api_key_env)
+        if value:
+            return value
+        if required:
+            raise ProviderError(f"Environment variable {api_key_env} is not set (it should hold your API key).")
+    return None
+
+
+@dataclass
+class OpenAICompatibleProvider(Provider):
+    base_url: str
+    model: str
+    api_key: str | None = None
+    api_key_env: str | None = None
+    #: send ``response_format={"type": "json_object"}`` when JSON is requested
+    #: (supported by OpenAI, Ollama and others, but not every server)
+    json_mode: bool = False
+    timeout: float = 120.0
+    extra_headers: dict = field(default_factory=dict)
+    name: str = "openai-compatible"
+
+    def __post_init__(self):
+        if not self.model:
+            raise ProviderError(f"Provider {self.name!r} needs a 'model' setting.")
+
+    @property
+    def cache_key(self) -> str:
+        return f"{self.name}:{self.model}"
+
+    def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
+        key = _resolve_api_key(self.api_key, self.api_key_env, required=self.api_key_env is not None)
+        body = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+        }
+        if json_schema is not None and self.json_mode:
+            body["response_format"] = {"type": "json_object"}
+        headers = {"Content-Type": "application/json", **self.extra_headers}
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
+        url = self.base_url.rstrip("/") + "/chat/completions"
+        request = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                payload = json.loads(response.read().decode())
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode(errors="replace")[:500]
+            raise ProviderError(f"{self.name}: HTTP {e.code} from {url}: {detail}") from e
+        except (urllib.error.URLError, TimeoutError) as e:
+            raise ProviderError(f"{self.name}: could not reach {url}: {e}") from e
+        try:
+            content = payload["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as e:
+            raise ProviderError(f"{self.name}: unexpected response: {str(payload)[:500]}") from e
+        if isinstance(content, list):  # some servers return content parts
+            content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+        return content or ""
+
+
+# Models that accept the server-side refusal fallback (``fallbacks: "default"``)
+_FALLBACK_MODELS = ("claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5")
+
+
+@dataclass
+class AnthropicProvider(Provider):
+    model: str = "claude-opus-5-5"
+    #: ``output_config.effort``; "" omits it (for models without effort support)
+    effort: str = "low"
+    max_tokens: int = 16000
+    api_key: str | None = None
+    api_key_env: str | None = None
+    #: re-run refused requests on Anthropic's recommended fallback model;
+    #: None means "on for models that support it"
+    refusal_fallback: bool | None = None
+    timeout: float = 120.0
+    name: str = "anthropic"
+
+    @property
+    def cache_key(self) -> str:
+        return f"{self.name}:{self.model}"
+
+    def _client(self, anthropic):
+        key = _resolve_api_key(self.api_key, self.api_key_env, required=self.api_key_env is not None)
+        # With no explicit key the SDK resolves ANTHROPIC_API_KEY / an `ant auth login` profile itself.
+        if key:
+            return anthropic.Anthropic(api_key=key, timeout=self.timeout)
+        return anthropic.Anthropic(timeout=self.timeout)
+
+    def request_kwargs(self, system: str, prompt: str, json_schema: dict | None = None) -> dict:
+        kwargs = dict(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        output_config = {}
+        if self.effort:
+            output_config["effort"] = self.effort
+        if json_schema is not None:
+            output_config["format"] = {"type": "json_schema", "schema": json_schema}
+        if output_config:
+            kwargs["output_config"] = output_config
+        fallback = self.refusal_fallback if self.refusal_fallback is not None else self.model in _FALLBACK_MODELS
+        if fallback:
+            kwargs["betas"] = ["server-side-fallback-2026-07-01"]
+            kwargs["fallbacks"] = "default"
+        return kwargs
+
+    def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
+        try:
+            import anthropic
+        except ImportError as e:
+            raise ProviderError("The Anthropic provider needs the SDK: pip install 'paratext[anthropic]'") from e
+        client = self._client(anthropic)
+        try:
+            response = client.beta.messages.create(**self.request_kwargs(system, prompt, json_schema))
+        except anthropic.AuthenticationError as e:
+            raise ProviderError("anthropic: authentication failed; check ANTHROPIC_API_KEY.") from e
+        except anthropic.APIError as e:
+            raise ProviderError(f"anthropic: {e}") from e
+        if response.stop_reason == "refusal":
+            details = getattr(response, "stop_details", None)
+            category = getattr(details, "category", None) if details else None
+            raise ProviderError(f"anthropic: the model declined this request (category: {category}).")
+        return "".join(block.text for block in response.content if block.type == "text")
+
+
+@dataclass
+class CommandProvider(Provider):
+    """Run a local command; the prompt goes to stdin (or as the last argument)."""
+
+    command: list[str] | str = field(default_factory=list)
+    prompt_via: str = "stdin"  # or "arg"
+    timeout: float = 300.0
+    name: str = "command"
+
+    def __post_init__(self):
+        if isinstance(self.command, str):
+            self.command = shlex.split(self.command)
+        if not self.command:
+            raise ProviderError(f"Provider {self.name!r} needs a 'command' setting.")
+        if self.prompt_via not in ("stdin", "arg"):
+            raise ProviderError("prompt_via must be 'stdin' or 'arg'")
+
+    @property
+    def cache_key(self) -> str:
+        return f"{self.name}:{' '.join(self.command)}"
+
+    def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
+        full_prompt = f"{system}\n\n{prompt}"
+        args = list(self.command) + ([full_prompt] if self.prompt_via == "arg" else [])
+        try:
+            result = subprocess.run(
+                args,
+                input=full_prompt if self.prompt_via == "stdin" else None,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+            )
+        except FileNotFoundError as e:
+            raise ProviderError(f"{self.name}: command not found: {self.command[0]}") from e
+        except subprocess.TimeoutExpired as e:
+            raise ProviderError(f"{self.name}: timed out after {self.timeout:.0f}s") from e
+        if result.returncode != 0:
+            raise ProviderError(f"{self.name}: exited with {result.returncode}: {result.stderr.strip()[:500]}")
+        return result.stdout
+
+
+# --------------------------------------------------------------------------
+# Presets: named starting points; any field can be overridden in config.
+# --------------------------------------------------------------------------
+
+PRESETS: dict[str, dict] = {
+    # API-key providers (pay-per-use developer accounts)
+    "anthropic": {"kind": "anthropic", "model": "claude-opus-5-5"},
+    "openai": {"kind": "openai", "base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY"},
+    "gemini": {
+        "kind": "openai",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "api_key_env": "GEMINI_API_KEY",
+    },
+    "openrouter": {"kind": "openai", "base_url": "https://openrouter.ai/api/v1", "api_key_env": "OPENROUTER_API_KEY"},
+    # Local models (free, private)
+    "ollama": {"kind": "openai", "base_url": "http://localhost:11434/v1", "json_mode": True},
+    "lmstudio": {"kind": "openai", "base_url": "http://localhost:1234/v1"},
+    # Subscription CLIs (sign in once with the vendor's own tool)
+    "claude-cli": {"kind": "command", "command": ["claude", "-p"]},
+    "codex-cli": {"kind": "command", "command": ["codex", "exec", "-"]},
+    "gemini-cli": {"kind": "command", "command": ["gemini"]},
+}
+
+_KINDS = {"openai": OpenAICompatibleProvider, "anthropic": AnthropicProvider, "command": CommandProvider}
+
+
+def make_provider(name: str, settings: dict | None = None) -> Provider:
+    """Build a provider from a preset name and/or explicit settings.
+
+    ``settings`` may contain ``preset`` (a key of ``PRESETS``), ``kind``
+    ('openai', 'anthropic' or 'command') and any field of that provider class.
+    If ``settings`` is None, ``name`` itself must be a preset.
+    """
+    settings = dict(settings or {})
+    preset_name = settings.pop("preset", None) or (name if name in PRESETS else None)
+    merged = dict(PRESETS.get(preset_name, {})) if preset_name else {}
+    if preset_name and preset_name not in PRESETS:
+        raise ProviderError(f"Unknown preset {preset_name!r}; choose from {', '.join(PRESETS)}")
+    merged.update(settings)
+    kind = merged.pop("kind", None)
+    if kind is None:
+        raise ProviderError(
+            f"Provider {name!r} is not a preset and has no 'kind'. Presets: {', '.join(PRESETS)}; "
+            "kinds: openai, anthropic, command."
+        )
+    if kind not in _KINDS:
+        raise ProviderError(f"Unknown provider kind {kind!r}; use openai, anthropic or command.")
+    cls = _KINDS[kind]
+    allowed = set(cls.__dataclass_fields__)
+    unknown = set(merged) - allowed
+    if unknown:
+        raise ProviderError(f"Unknown setting(s) for {kind} provider {name!r}: {', '.join(sorted(unknown))}")
+    merged.setdefault("name", name)
+    if kind == "openai":
+        merged.setdefault("model", "")
+    return cls(**merged)

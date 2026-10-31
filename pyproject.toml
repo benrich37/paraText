@@ -10,18 +10,27 @@ readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Ben Rich", email = "benjamin.rich@colorado.edu" }]
 
-# tkinter (stdlib) is the only requirement of the original widget.
-dependencies = []
+# tkinter (stdlib) is also required; some Linux distros package it separately (python3-tk).
+dependencies = [
+    "pymupdf>=1.24",
+    "tomli>=1.1; python_version < '3.11'",
+]
 
 [project.optional-dependencies]
+anthropic = ["anthropic>=2.3"]
 test = ["pytest>=8.2.2"]
-dev = ["paratext[test]", "pre-commit>=3.7.1", "ruff>=0.4.9"]
+dev = ["paratext[anthropic,test]", "pre-commit>=3.7.1", "ruff>=0.4.9"]
+
+[project.scripts]
+paratext = "paratext.cli:main"
 
 [tool.setuptools.dynamic]
 version = { attr = "paratext.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# PyMuPDF's SWIG bindings warn on import under Python 3.12+
+filterwarnings = ["ignore:builtin type .* has no __module__ attribute:DeprecationWarning"]
 
 [tool.ruff]
 target-version = "py310"
