@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paratext"
+dynamic = ["version"]
+description = "Expandable, audience-aware context for technical text and scientific papers"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Ben Rich", email = "benjamin.rich@colorado.edu" }]
+
+# tkinter (stdlib) is the only requirement of the original widget.
+dependencies = []
+
+[tool.setuptools.dynamic]
+version = { attr = "paratext.__version__" }
