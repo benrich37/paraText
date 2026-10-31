@@ -13,5 +13,25 @@ authors = [{ name = "Ben Rich", email = "benjamin.rich@colorado.edu" }]
 # tkinter (stdlib) is the only requirement of the original widget.
 dependencies = []
 
+[project.optional-dependencies]
+test = ["pytest>=8.2.2"]
+dev = ["paratext[test]", "pre-commit>=3.7.1", "ruff>=0.4.9"]
+
 [tool.setuptools.dynamic]
 version = { attr = "paratext.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+output-format = "concise"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+# UP038 (isinstance with X | Y) is deprecated in newer ruff and slower at runtime
+ignore = ["UP038"]
+
+[tool.ruff.format]
+docstring-code-format = true
