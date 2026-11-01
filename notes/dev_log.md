@@ -2,6 +2,59 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-01: Qt reader, setup dialog, tooltip colours
+
+The user asked for three things: fix the tooltip colours (white text on tan was unreadable), make provider setup
+user-friendly (ideally entirely in the GUI), and reconsider tkinter for the reader, treating the original code as a
+legacy proof of concept.
+
+### Framework decision: PySide6 (Qt 6)
+
+What the reader needs: crisp page rendering on HiDPI, continuous scrolling and zoom, overlays positioned at word
+boxes, hover hit-testing with tooltips that stay on screen, text selection, background threads with safe GUI
+updates, a forms-style settings dialog, and tests that run in CI without a display.
+
+| Option | Verdict |
+|---|---|
+| **PySide6** (Qt Widgets) | Chosen. `QGraphicsView` gives zoom/scroll/overlays with no manual geometry; `QToolTip` handles rich text and screen edges; signals deliver worker-thread results on the GUI thread; `QT_QPA_PLATFORM=offscreen` runs GUI tests headless (works on this Mac and in CI); pytest-qt exists; LGPL; wheels for all three OSes. Cost: a ~350 MB install (`PySide6-Essentials`). |
+| PyQt6 | Same toolkit, GPL/commercial licence. No reason to prefer it. |
+| wxPython | Native widgets, mature, but no equivalent of QGraphicsView for a zoomable canvas with items, and no offscreen test backend. |
+| Flet (Flutter) | Good for cross-platform forms; no custom-drawn, hit-testable document canvas. Web-ish rendering. |
+| Dear PyGui | GPU immediate mode; custom-drawn widgets, weak text rendering, no native look, no PDF. |
+| Kivy / Toga | Touch-first / immature widget coverage. |
+| Web front-end (PDF.js + NiceGUI or pywebview) | Best PDF text layer, but hit-testing and overlays need JavaScript; a second language. Kept as a roadmap option, not needed for desktop. |
+| tkinter (status quo) | Blurry on Retina, manual hit-testing and tooltip placement, no dark-mode-safe colours, one page at a time. |
+
+Sources checked: PyPI versions (PySide6 6.12.0, pytest-qt 4.5.0), the Unite.AI framework guide (secondary),
+and Qt forum threads on offscreen testing. PySide6 ships QtPdf as well, but PyMuPDF already gives word boxes,
+so the reader keeps PyMuPDF for rendering and text.
+
+### What changed
+
+- `reader/` is new: `pageview.py` (DocumentView, PageItem, PixmapCache, render job), `app.py` (ReaderWindow),
+  `setup.py` (SetupDialog). The tkinter reader is gone (git history has it). The legacy `widget.ParaText` stays.
+- Tooltip colours: explicit `color: #1b1b1b; background: #fff9db` in `TOOLTIP_STYLE`, applied app-wide. The old
+  tkinter tooltip set only the background, so macOS dark mode supplied white text.
+- Setup dialog: options grouped by how the user pays (subscription CLI / API key / local), each with a readiness
+  check (`preset_status`: CLI on PATH, key present, model chosen), per-kind form rows, "Fetch models"
+  (`list_models` → `GET /models`), "Send a test prompt", and "Save and use" → `Config.save()` (0600 because
+  it may hold a key). Also reachable as `paratext setup`. The reader shows an info bar with a "Set up AI…" button
+  when no provider is ready. Provider and audience changes in the toolbar are saved to the config too.
+- `pdf.PdfDocument` got a lock (PyMuPDF is not thread-safe; the render thread and engine workers now share a
+  document) and a raw-RGB `render` for Qt.
+- Continuous scrolling, HiDPI-correct rendering, zoom with Ctrl/⌘+wheel and "Fit width", "Explain whole paper",
+  and single-click word selection came with the rewrite.
+
+### Verification
+
+- 143 tests pass offscreen on macOS in ~7 s, including hover → tooltip text, click → panel, drag → selection →
+  explanation, paging, zoom → background render, offline mode, broken config, and the dialog's save/test/fetch
+  flows (with monkeypatched network and CLI lookups).
+- **Still not seen on a screen.** No human has looked at the Qt window or dialog yet; see roadmap item 0.
+- **Still no live AI call.** Same situation as before: no keys or CLIs on this machine.
+- CI on Linux needs `libegl1 libopengl0 libgl1 libxkbcommon0` for PySide6 even offscreen; the workflow installs
+  them. Unverified until the workflow runs.
+
 ## 2026-10-31: modernization (branch `modernize`)
 
 The user asked for three things in order:

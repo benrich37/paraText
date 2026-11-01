@@ -1,5 +1,5 @@
-"""The paraText PDF reader GUI."""
+"""The paraText PDF reader GUI (Qt / PySide6)."""
 
-from paratext.reader.app import ReaderApp, run
+from paratext.reader.app import ReaderWindow, run
 
-__all__ = ["ReaderApp", "run"]
+__all__ = ["ReaderWindow", "run"]

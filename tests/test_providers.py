@@ -7,12 +7,15 @@ from types import SimpleNamespace
 import pytest
 
 from paratext.ai.providers import (
+    PRESET_INFO,
     PRESETS,
     AnthropicProvider,
     CommandProvider,
     OpenAICompatibleProvider,
     ProviderError,
+    list_models,
     make_provider,
+    preset_status,
 )
 
 # --------------------------------------------------------------------------
@@ -35,6 +38,15 @@ def chat_server():
                 return
             reply = {"choices": [{"message": {"role": "assistant", "content": "hello from " + body["model"]}}]}
             data = json.dumps(reply).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            data = json.dumps({"data": [{"id": "m-b"}, {"id": "m-a"}, {"object": "x"}]}).encode()
+            received.append({"path": self.path, "headers": dict(self.headers)})
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
@@ -223,3 +235,49 @@ def test_make_provider_errors():
         make_provider("x", {"preset": "nope"})
     with pytest.raises(ProviderError, match="Unknown setting"):
         make_provider("x", {"preset": "anthropic", "colour": "red"})
+
+
+# --------------------------------------------------------------------------
+# readiness checks and model listing
+# --------------------------------------------------------------------------
+
+
+def test_every_preset_has_info():
+    assert set(PRESET_INFO) == set(PRESETS)
+
+
+def test_preset_status_command(monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda cmd: None)
+    ready, msg = preset_status("claude-cli")
+    assert not ready and "claude" in msg and "not installed" in msg
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/local/bin/" + cmd)
+    assert preset_status("claude-cli")[0]
+    assert not preset_status("x", {"kind": "command", "command": []})[0]
+
+
+def test_preset_status_anthropic(monkeypatch):
+    pytest.importorskip("anthropic")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    ready, msg = preset_status("anthropic")
+    assert not ready and "ANTHROPIC_API_KEY" in msg
+    assert preset_status("anthropic", {"preset": "anthropic", "api_key": "sk"})[0]
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk")
+    assert preset_status("anthropic")[0]
+
+
+def test_preset_status_openai(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert "OPENAI_API_KEY" in preset_status("openai")[1]
+    assert "model" in preset_status("openai", {"preset": "openai", "api_key": "k"})[1]
+    assert preset_status("openai", {"preset": "openai", "api_key": "k", "model": "m"})[0]
+    # local servers need no key
+    assert "model" in preset_status("ollama")[1]
+    assert preset_status("ollama", {"preset": "ollama", "model": "llama"})[0]
+
+
+def test_list_models(chat_server):
+    assert list_models(chat_server.url, "sk-x") == ["m-a", "m-b"]
+    req = chat_server.received[0]
+    assert req["path"] == "/v1/models" and req["headers"]["Authorization"] == "Bearer sk-x"
+    with pytest.raises(ProviderError, match="Could not reach"):
+        list_models("http://127.0.0.1:9/v1", timeout=2)

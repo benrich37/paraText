@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from paratext.ai.prompts import DEFAULT_AUDIENCE
@@ -41,3 +43,22 @@ def test_custom_provider_and_cache_dir(tmp_path):
     assert config.provider_names()[0] == "mine"
     with pytest.raises(ProviderError, match="No provider named"):
         config.make_provider("other")
+
+
+def test_save_round_trip(tmp_path):
+    path = tmp_path / "config.toml"
+    config = Config(path=path)
+    config.default_provider = "anthropic"
+    config.audience = "a curious teenager"
+    config.providers["anthropic"] = {"preset": "anthropic", "api_key": "sk-secret", "model": "claude-opus-5-5"}
+    config.providers["mine"] = {"kind": "command", "command": ["my-llm"], "timeout": 60.0}
+    saved = config.save()
+    assert saved == path
+    if os.name != "nt":
+        assert oct(path.stat().st_mode & 0o777) == "0o600"
+    again = Config.load(path)
+    assert again.default_provider == "anthropic"
+    assert again.audience == "a curious teenager"
+    assert again.providers == config.providers
+    assert again.make_provider().api_key == "sk-secret"
+    assert again.make_provider("mine").timeout == 60.0

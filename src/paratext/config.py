@@ -11,6 +11,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import tomli_w
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # pragma: no cover
@@ -101,6 +103,33 @@ class Config:
             cache_dir=Path(cache_dir).expanduser() if cache_dir else default_cache_dir(),
             path=path,
         )
+
+    def save(self, path=None) -> Path:
+        """Write the config as TOML (comments are not preserved).
+
+        The file is made private (0600) because it may hold API keys.
+        """
+        path = Path(path) if path else (self.path or default_config_path())
+        data = {}
+        if self.default_provider:
+            data["default_provider"] = self.default_provider
+        data["audience"] = self.audience
+        if self.cache_dir != default_cache_dir():
+            data["cache_dir"] = str(self.cache_dir)
+        if self.providers:
+            data["providers"] = {
+                name: {k: v for k, v in s.items() if v is not None} for name, s in self.providers.items()
+            }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(tomli_w.dumps(data))
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:  # pragma: no cover - e.g. unusual filesystems
+            pass
+        os.replace(tmp, path)
+        self.path = path
+        return path
 
     def provider_names(self) -> list[str]:
         return list(dict.fromkeys(list(self.providers) + list(PRESETS)))

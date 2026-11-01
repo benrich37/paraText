@@ -1,8 +1,14 @@
-"""Read PDFs with PyMuPDF: page images, words with bounding boxes, and text."""
+"""Read PDFs with PyMuPDF: page images, words with bounding boxes, and text.
+
+PyMuPDF is not thread-safe, so every access to the underlying document goes
+through one lock; callers (engine workers, the GUI's render thread) may use a
+``PdfDocument`` from any thread.
+"""
 
 from __future__ import annotations
 
 import hashlib
+import threading
 from functools import cached_property
 from pathlib import Path
 from typing import NamedTuple
@@ -29,14 +35,27 @@ class Word(NamedTuple):
         return self.x0 <= x <= self.x1 and self.y0 <= y <= self.y1
 
 
+class RenderedPage(NamedTuple):
+    """Raw RGB pixels of a rendered page."""
+
+    width: int
+    height: int
+    stride: int
+    samples: bytes
+
+
 class PdfDocument:
     def __init__(self, path):
         self.path = Path(path)
+        self._lock = threading.RLock()
         self._doc = pymupdf.open(self.path)
         self._words: dict[int, list[Word]] = {}
+        self._texts: dict[int, str] = {}
+        self._sizes: dict[int, tuple[float, float]] = {}
 
     def close(self) -> None:
-        self._doc.close()
+        with self._lock:
+            self._doc.close()
 
     def __enter__(self):
         return self
@@ -46,7 +65,8 @@ class PdfDocument:
 
     @property
     def page_count(self) -> int:
-        return self._doc.page_count
+        with self._lock:
+            return self._doc.page_count
 
     @cached_property
     def sha256(self) -> str:
@@ -58,17 +78,22 @@ class PdfDocument:
 
     @property
     def title(self) -> str:
-        return (self._doc.metadata or {}).get("title") or self.path.stem
+        with self._lock:
+            return (self._doc.metadata or {}).get("title") or self.path.stem
 
     def page_size(self, page_no: int) -> tuple[float, float]:
-        rect = self._doc[page_no].rect
-        return rect.width, rect.height
+        if page_no not in self._sizes:
+            with self._lock:
+                rect = self._doc[page_no].rect
+                self._sizes[page_no] = (rect.width, rect.height)
+        return self._sizes[page_no]
 
     def words(self, page_no: int) -> list[Word]:
         """Words in content-stream order (usually reading order, column by column)."""
         if page_no not in self._words:
-            raw = self._doc[page_no].get_text("words", flags=_WORD_FLAGS)
-            self._words[page_no] = [Word(w[0], w[1], w[2], w[3], w[4], w[5], w[6]) for w in raw]
+            with self._lock:
+                raw = self._doc[page_no].get_text("words", flags=_WORD_FLAGS)
+                self._words[page_no] = [Word(w[0], w[1], w[2], w[3], w[4], w[5], w[6]) for w in raw]
         return self._words[page_no]
 
     def line_ends(self, page_no: int) -> set[int]:
@@ -81,7 +106,10 @@ class PdfDocument:
         }
 
     def page_text(self, page_no: int) -> str:
-        return self._doc[page_no].get_text("text", flags=_TEXT_FLAGS)
+        if page_no not in self._texts:
+            with self._lock:
+                self._texts[page_no] = self._doc[page_no].get_text("text", flags=_TEXT_FLAGS)
+        return self._texts[page_no]
 
     def paper_context(self, max_chars: int = 2500) -> str:
         """Title plus the start of page 1 (usually title, authors and abstract)."""
@@ -93,9 +121,16 @@ class PdfDocument:
         words = self.words(page_no)
         return " ".join(w.text for w in words[max(0, start - radius) : end + radius + 1])
 
+    def render(self, page_no: int, scale: float = 1.0) -> RenderedPage:
+        """Render a page at ``scale`` pixels per point as packed RGB."""
+        with self._lock:
+            pix = self._doc[page_no].get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
+            return RenderedPage(pix.width, pix.height, pix.stride, bytes(pix.samples))
+
     def render_png(self, page_no: int, zoom: float = 1.0) -> bytes:
-        pix = self._doc[page_no].get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
-        return pix.tobytes("png")
+        with self._lock:
+            pix = self._doc[page_no].get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
+            return pix.tobytes("png")
 
     def word_at(self, page_no: int, x: float, y: float) -> int | None:
         """Index of the word containing point (x, y) in PDF points, if any."""

@@ -14,9 +14,11 @@ Three kinds cover most ways a user can reach a model:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import urllib.error
 import urllib.request
@@ -277,3 +279,129 @@ def make_provider(name: str, settings: dict | None = None) -> Provider:
     if kind == "openai":
         merged.setdefault("model", "")
     return cls(**merged)
+
+
+# --------------------------------------------------------------------------
+# Descriptions and readiness checks, for the setup dialog and `paratext providers`
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PresetInfo:
+    title: str
+    group: str  # "subscription", "api-key" or "local"
+    description: str
+    suggested_models: tuple[str, ...] = ()
+
+
+PRESET_INFO: dict[str, PresetInfo] = {
+    "claude-cli": PresetInfo(
+        "Claude (Claude Code subscription)",
+        "subscription",
+        "Uses the Claude Code command-line tool, signed in with your Claude subscription. "
+        "Install it from https://claude.com/claude-code, then run `claude` once in a terminal to sign in.",
+    ),
+    "codex-cli": PresetInfo(
+        "ChatGPT (Codex CLI subscription)",
+        "subscription",
+        "Uses OpenAI's Codex command-line tool, signed in with your ChatGPT subscription. "
+        "Install it (npm install -g @openai/codex), then run `codex` once to sign in.",
+    ),
+    "gemini-cli": PresetInfo(
+        "Gemini (Gemini CLI)",
+        "subscription",
+        "Uses Google's Gemini command-line tool, signed in with your Google account. "
+        "Install it (npm install -g @google/gemini-cli), then run `gemini` once to sign in.",
+    ),
+    "anthropic": PresetInfo(
+        "Anthropic API key",
+        "api-key",
+        "Pay-per-use access to Claude with an API key from https://console.anthropic.com. "
+        "Needs the SDK: pip install 'paratext[anthropic]'.",
+        ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"),
+    ),
+    "openai": PresetInfo(
+        "OpenAI API key",
+        "api-key",
+        "Pay-per-use access with an API key from https://platform.openai.com. "
+        "Press 'Fetch models' to list the chat models your key can use.",
+    ),
+    "gemini": PresetInfo(
+        "Google Gemini API key",
+        "api-key",
+        "Pay-per-use access with an API key from https://aistudio.google.com. "
+        "Press 'Fetch models' to list available models.",
+    ),
+    "openrouter": PresetInfo(
+        "OpenRouter API key",
+        "api-key",
+        "One API key for models from many vendors (https://openrouter.ai). Press 'Fetch models' to list them.",
+    ),
+    "ollama": PresetInfo(
+        "Ollama (local)",
+        "local",
+        "A model running on this computer with Ollama (https://ollama.com): free and private. "
+        "Run `ollama pull <model>` first, then press 'Fetch models'.",
+    ),
+    "lmstudio": PresetInfo(
+        "LM Studio (local)",
+        "local",
+        "A model served locally by LM Studio (https://lmstudio.ai). Start its server, then press 'Fetch models'.",
+    ),
+}
+
+GROUP_TITLES = {
+    "subscription": "Use a chat subscription (no API key)",
+    "api-key": "Use an API key (pay per use)",
+    "local": "Use a local model (free, private)",
+}
+
+
+def preset_status(name: str, settings: dict | None = None) -> tuple[bool, str]:
+    """Check whether a provider looks usable without calling it.
+
+    Returns ``(ready, message)``; the message says what is missing.
+    """
+    merged = dict(PRESETS.get((settings or {}).get("preset") or name, {}))
+    merged.update(settings or {})
+    kind = merged.get("kind")
+    if kind == "command":
+        command = merged.get("command") or []
+        if isinstance(command, str):
+            command = shlex.split(command)
+        if not command:
+            return False, "No command set."
+        if shutil.which(command[0]) is None:
+            return False, f"`{command[0]}` is not installed (or not on your PATH)."
+        return True, f"`{command[0]}` found."
+    if kind == "anthropic":
+        if importlib.util.find_spec("anthropic") is None:
+            return False, "The Anthropic SDK is not installed: pip install 'paratext[anthropic]'"
+        if merged.get("api_key") or os.environ.get(merged.get("api_key_env") or "ANTHROPIC_API_KEY"):
+            return True, "API key found."
+        return False, "No API key: set ANTHROPIC_API_KEY or enter one in the setup dialog."
+    if kind == "openai":
+        env = merged.get("api_key_env")
+        if env and not (merged.get("api_key") or os.environ.get(env)):
+            return False, f"No API key: set {env} or enter one in the setup dialog."
+        if not merged.get("model"):
+            return False, "No model chosen."
+        return True, "Key and model set."
+    return False, "Unknown provider kind."
+
+
+def list_models(base_url: str, api_key: str | None = None, timeout: float = 15.0) -> list[str]:
+    """List model ids from an OpenAI-compatible server's ``/models`` endpoint."""
+    url = base_url.rstrip("/") + "/models"
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode())
+    except urllib.error.HTTPError as e:
+        raise ProviderError(f"HTTP {e.code} from {url}: {e.read().decode(errors='replace')[:300]}") from e
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise ProviderError(f"Could not reach {url}: {e}") from e
+    items = payload.get("data", payload) if isinstance(payload, dict) else payload
+    ids = [m.get("id") for m in items if isinstance(m, dict) and m.get("id")] if isinstance(items, list) else []
+    return sorted(ids)

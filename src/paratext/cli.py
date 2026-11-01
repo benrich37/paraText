@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 
-from paratext.ai.providers import PRESETS, ProviderError, make_provider
+from paratext.ai.providers import PRESETS, ProviderError, make_provider, preset_status
 from paratext.config import Config, default_config_path, write_template
 from paratext.engine import ContextEngine, ImmediateExecutor
 from paratext.glossary import find_spans
@@ -91,6 +91,23 @@ def cmd_explain(args, config: Config) -> int:
     return 0
 
 
+def cmd_setup(args, config: Config) -> int:
+    """Open just the AI setup dialog."""
+    import sys as _sys
+
+    from PySide6.QtWidgets import QApplication
+
+    from paratext.reader.setup import SetupDialog
+
+    _app = QApplication.instance() or QApplication(_sys.argv)  # must outlive the dialog
+    dialog = SetupDialog(config, current=config.default_provider)
+    if dialog.exec():
+        print(f"saved {dialog.config.path}: default provider is {dialog.selected_name!r}")
+        return 0
+    print("cancelled")
+    return 1
+
+
 def cmd_providers(args, config: Config) -> int:
     print(f"config: {config.path}{'' if config.path and config.path.exists() else ' (not found)'}")
     print(f"default: {config.default_provider or 'none'}\n")
@@ -103,7 +120,8 @@ def cmd_providers(args, config: Config) -> int:
         except ProviderError as e:
             provider, desc = None, f"not usable: {e}"
         origin = "config" if settings is not None else "preset"
-        line = f"  {name:<12} [{origin}] {desc}"
+        ready, readiness = preset_status(name, settings)
+        line = f"  {name:<12} [{origin}] {'ready' if ready else 'not ready'}: {readiness}  ({desc})"
         if args.check and provider is not None and (settings is not None or name == config.default_provider):
             try:
                 reply = provider.complete("You are a connectivity check.", "Reply with the single word OK.")
@@ -157,6 +175,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--detailed", action="store_true")
     ai_args(p)
     p.set_defaults(func=cmd_explain)
+
+    p = sub.add_parser("setup", help="open the AI setup dialog")
+    p.set_defaults(func=cmd_setup)
 
     p = sub.add_parser("providers", help="list configured providers and presets")
     p.add_argument("--check", action="store_true", help="send a tiny test prompt to configured providers")

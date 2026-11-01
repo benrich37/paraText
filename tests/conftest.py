@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-import _tkinter
-import tkinter as tk
-from pathlib import Path
+import os
 
-import pytest
+# Qt tests run without a display; must be set before a QApplication exists
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+import _tkinter  # noqa: E402
+import tkinter as tk  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import pytest  # noqa: E402
 
 TEST_DIR = Path(__file__).absolute().parent
 REPO_DIR = TEST_DIR.parent

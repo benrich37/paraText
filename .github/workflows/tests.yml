@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # Qt tests run on the offscreen platform plugin (no display needed)
+  QT_QPA_PLATFORM: offscreen
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -27,8 +31,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Tk needs a display; this provides a virtual one on Linux (no-op elsewhere)
+      # Tk (legacy widget tests) needs a display; this provides a virtual one on Linux
       - uses: pyvista/setup-headless-display-action@v3
+
+      # Shared libraries PySide6 links against, even on the offscreen platform
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libgl1 libxkbcommon0
 
       - uses: actions/setup-python@v5
         with:

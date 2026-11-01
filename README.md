@@ -23,9 +23,13 @@ cached per paper, provider, and audience in `~/.cache/paratext/`, so reopening a
 
 ```sh
 pip install -e .                    # add [anthropic] to use Claude through an API key
-paratext config --init              # writes ~/.config/paratext/config.toml; edit default_provider
 paratext read paper.pdf             # the GUI (or just: paratext paper.pdf)
 ```
+
+The first time, press **Set up AI…** in the toolbar (or run `paratext setup`). The dialog lists every way to
+connect, shows which ones are ready on your machine, lets you paste an API key or pick a model, sends a test
+prompt, and saves the choice to `~/.config/paratext/config.toml`. Editing that file by hand works too
+(`paratext config --init` writes a commented template).
 
 Command-line tools that share the same cache:
 
@@ -48,10 +52,10 @@ so there are three ways to connect:
 | **A developer API key** (pay per use) | `anthropic`, `openai`, `gemini`, `openrouter` | Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `OPENROUTER_API_KEY`, and pick a `model` in the config. |
 | **A local model** (free, private) | `ollama`, `lmstudio` | Run the local server and set `model`. |
 
-Anything that speaks the OpenAI chat-completions protocol works with `kind = "openai"` and a `base_url`. Any other CLI
-works with `kind = "command"`. See the generated config file for examples. Keys are read from environment variables,
-so they don't need to be stored in the config. Check that your provider's terms allow this kind of personal
-scripting.
+Anything that speaks the OpenAI chat-completions protocol works as a custom server (`kind = "openai"` plus a
+`base_url`); any other CLI works as a custom command (`kind = "command"`). API keys entered in the dialog are stored
+in the config file, which is made readable only by you; keys in environment variables are used if the field is left
+blank. Check that your provider's terms allow this kind of personal scripting.
 
 **Privacy:** the text of each page you open (and of the first page, as context) is sent to the provider you select.
 Use a local model for papers you can't share.
@@ -100,9 +104,10 @@ The widget is `paratext.widget.ParaText`, a `tkinter.Text` subclass.
 
 ```sh
 pip install -e ".[dev]"
-python -m pytest                 # GUI tests are skipped automatically without a display
+python -m pytest                 # reader tests run headless (Qt offscreen); legacy Tk tests skip without a display
 pre-commit run --all-files       # yaml / end-of-file / whitespace / ruff
 ```
 
-The PDF reader uses [PyMuPDF](https://pymupdf.readthedocs.io), which is licensed under the AGPL (commercial
-licenses are available from Artifex). Keep this in mind before distributing paraText.
+The reader is built with Qt ([PySide6](https://doc.qt.io/qtforpython-6/), LGPL) and renders pages with
+[PyMuPDF](https://pymupdf.readthedocs.io), which is licensed under the AGPL (commercial licenses are available from
+Artifex). Keep this in mind before distributing paraText.
