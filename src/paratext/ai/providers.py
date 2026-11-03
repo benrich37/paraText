@@ -72,6 +72,8 @@ class OpenAICompatibleProvider(Provider):
     #: send ``response_format={"type": "json_object"}`` when JSON is requested
     #: (supported by OpenAI, Ollama and others, but not every server)
     json_mode: bool = False
+    #: sent as ``reasoning_effort`` when non-empty (OpenAI reasoning models only)
+    effort: str = ""
     timeout: float = 120.0
     extra_headers: dict = field(default_factory=dict)
     name: str = "openai-compatible"
@@ -82,7 +84,7 @@ class OpenAICompatibleProvider(Provider):
 
     @property
     def cache_key(self) -> str:
-        return f"{self.name}:{self.model}"
+        return f"{self.name}:{self.model}" + (f":{self.effort}" if self.effort else "")
 
     def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
         key = _resolve_api_key(self.api_key, self.api_key_env, required=self.api_key_env is not None)
@@ -92,6 +94,8 @@ class OpenAICompatibleProvider(Provider):
         }
         if json_schema is not None and self.json_mode:
             body["response_format"] = {"type": "json_object"}
+        if self.effort:
+            body["reasoning_effort"] = self.effort
         headers = {"Content-Type": "application/json", **self.extra_headers}
         if key:
             headers["Authorization"] = f"Bearer {key}"
@@ -134,7 +138,7 @@ class AnthropicProvider(Provider):
 
     @property
     def cache_key(self) -> str:
-        return f"{self.name}:{self.model}"
+        return f"{self.name}:{self.model}" + (f":{self.effort}" if self.effort else "")
 
     def _client(self, anthropic):
         key = _resolve_api_key(self.api_key, self.api_key_env, required=self.api_key_env is not None)
@@ -188,6 +192,9 @@ class CommandProvider(Provider):
 
     command: list[str] | str = field(default_factory=list)
     prompt_via: str = "stdin"  # or "arg"
+    #: model name, inserted into ``model_args`` (e.g. ``["--model", "{model}"]``) when non-empty
+    model: str = ""
+    model_args: list[str] = field(default_factory=list)
     timeout: float = 300.0
     name: str = "command"
 
@@ -198,14 +205,23 @@ class CommandProvider(Provider):
             raise ProviderError(f"Provider {self.name!r} needs a 'command' setting.")
         if self.prompt_via not in ("stdin", "arg"):
             raise ProviderError("prompt_via must be 'stdin' or 'arg'")
+        if self.model and not self.model_args:
+            raise ProviderError(f"Provider {self.name!r} has a model but no 'model_args' to pass it with.")
 
     @property
     def cache_key(self) -> str:
-        return f"{self.name}:{' '.join(self.command)}"
+        return f"{self.name}:{' '.join(self.full_command())}"
+
+    def full_command(self) -> list[str]:
+        """The command with the model flag filled in."""
+        args = list(self.command)
+        if self.model:
+            args += [a.format(model=self.model) for a in self.model_args]
+        return args
 
     def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
         full_prompt = f"{system}\n\n{prompt}"
-        args = list(self.command) + ([full_prompt] if self.prompt_via == "arg" else [])
+        args = self.full_command() + ([full_prompt] if self.prompt_via == "arg" else [])
         try:
             result = subprocess.run(
                 args,
@@ -241,9 +257,9 @@ PRESETS: dict[str, dict] = {
     "ollama": {"kind": "openai", "base_url": "http://localhost:11434/v1", "json_mode": True},
     "lmstudio": {"kind": "openai", "base_url": "http://localhost:1234/v1"},
     # Subscription CLIs (sign in once with the vendor's own tool)
-    "claude-cli": {"kind": "command", "command": ["claude", "-p"]},
-    "codex-cli": {"kind": "command", "command": ["codex", "exec", "-"]},
-    "gemini-cli": {"kind": "command", "command": ["gemini"]},
+    "claude-cli": {"kind": "command", "command": ["claude", "-p"], "model_args": ["--model", "{model}"]},
+    "codex-cli": {"kind": "command", "command": ["codex", "exec", "-"], "model_args": ["-m", "{model}"]},
+    "gemini-cli": {"kind": "command", "command": ["gemini"], "model_args": ["-m", "{model}"]},
 }
 
 _KINDS = {"openai": OpenAICompatibleProvider, "anthropic": AnthropicProvider, "command": CommandProvider}
@@ -300,6 +316,7 @@ PRESET_INFO: dict[str, PresetInfo] = {
         "subscription",
         "Uses the Claude Code command-line tool, signed in with your Claude subscription. "
         "Install it from https://claude.com/claude-code, then run `claude` once in a terminal to sign in.",
+        ("sonnet", "opus", "haiku"),
     ),
     "codex-cli": PresetInfo(
         "ChatGPT (Codex CLI subscription)",
@@ -355,6 +372,60 @@ GROUP_TITLES = {
     "api-key": "Use an API key (pay per use)",
     "local": "Use a local model (free, private)",
 }
+
+
+EFFORT_LEVELS = {
+    "anthropic": ("low", "medium", "high", "xhigh", "max"),
+    "openai": ("", "low", "medium", "high"),
+}
+
+
+def provider_capabilities(settings: dict) -> dict:
+    """Which settings a provider (merged preset + overrides) supports.
+
+    Drives the setup dialog so each provider shows only what applies to it.
+    Keys: ``api_key``, ``base_url``, ``model``, ``fetch_models``, ``command``
+    (bools), ``effort`` (tuple of levels, or None), ``model_help``, ``effort_help``.
+    """
+    kind = settings.get("kind")
+    caps = {
+        "api_key": False,
+        "base_url": False,
+        "model": False,
+        "fetch_models": False,
+        "command": False,
+        "effort": None,
+        "model_help": "",
+        "effort_help": "",
+    }
+    if kind == "anthropic":
+        caps.update(
+            api_key=True,
+            model=True,
+            effort=EFFORT_LEVELS["anthropic"],
+            model_help="Opus is the most capable; Sonnet and Haiku are cheaper and faster.",
+            effort_help="How much the model thinks before answering. Finding and explaining terms works well at "
+            "'low'; raise it for dense papers. Higher levels cost more and take longer.",
+        )
+    elif kind == "openai":
+        caps.update(
+            api_key=bool(settings.get("api_key_env")),
+            base_url=True,
+            model=True,
+            fetch_models=True,
+            effort=EFFORT_LEVELS["openai"],
+            model_help="'Fetch models' lists what this server offers; type a name if it is not listed.",
+            effort_help="Sent as 'reasoning_effort'. Only reasoning models accept it; leave blank for other "
+            "models and for local servers, which may reject it.",
+        )
+    elif kind == "command":
+        caps.update(
+            command=True,
+            model=bool(settings.get("model_args")),
+            model_help="Leave blank for the tool's default. Passed as its model flag "
+            f"({' '.join(settings.get('model_args', []))}).",
+        )
+    return caps
 
 
 def preset_status(name: str, settings: dict | None = None) -> tuple[bool, str]:

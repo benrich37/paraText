@@ -32,10 +32,18 @@ def parse_pages(spec: str | None, page_count: int) -> list[int]:
 
 def _engine(args, config: Config) -> ContextEngine:
     from paratext.pdf import PdfDocument
+    from paratext.profile import UserProfile
 
     provider = config.make_provider(args.provider)
     audience = args.audience or config.audience
-    return ContextEngine(PdfDocument(args.pdf), provider, config.cache_dir, audience, executor=ImmediateExecutor())
+    return ContextEngine(
+        PdfDocument(args.pdf),
+        provider,
+        config.cache_dir,
+        audience,
+        executor=ImmediateExecutor(),
+        profile=UserProfile.load(),
+    )
 
 
 def cmd_read(args, config: Config) -> int:

@@ -16,6 +16,7 @@ from paratext.ai.providers import (
     list_models,
     make_provider,
     preset_status,
+    provider_capabilities,
 )
 
 # --------------------------------------------------------------------------
@@ -72,6 +73,17 @@ def test_openai_compatible_roundtrip(chat_server, monkeypatch):
     assert req["headers"]["Authorization"] == "Bearer sk-test"
     assert req["body"]["messages"] == [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}]
     assert req["body"]["response_format"] == {"type": "json_object"}
+
+
+def test_openai_compatible_reasoning_effort(chat_server):
+    p = OpenAICompatibleProvider(base_url=chat_server.url, model="m3", effort="high")
+    p.complete("sys", "hi")
+    assert chat_server.received[0]["body"]["reasoning_effort"] == "high"
+    assert p.cache_key == "openai-compatible:m3:high"
+    plain = OpenAICompatibleProvider(base_url=chat_server.url, model="m3")
+    plain.complete("sys", "hi")
+    assert "reasoning_effort" not in chat_server.received[1]["body"]
+    assert plain.cache_key == "openai-compatible:m3"
 
 
 def test_openai_compatible_no_key_no_json_mode(chat_server):
@@ -186,6 +198,35 @@ def test_command_provider_arg():
         command=[sys.executable, "-c", "import sys; print(sys.argv[-1].splitlines()[0])"], prompt_via="arg"
     )
     assert p.complete("system line", "prompt").strip() == "system line"
+
+
+def test_command_provider_model_flag():
+    echo_args = [sys.executable, "-c", "import sys; print(' '.join(sys.argv[1:]))"]
+    p = CommandProvider(command=echo_args, model="sonnet", model_args=["--model", "{model}"])
+    assert p.complete("s", "p").strip() == "--model sonnet"
+    assert p.full_command()[-2:] == ["--model", "sonnet"]
+    assert p.cache_key.endswith("--model sonnet")
+    assert CommandProvider(command=echo_args, model_args=["--model", "{model}"]).full_command() == echo_args
+    with pytest.raises(ProviderError, match="model_args"):
+        CommandProvider(command=echo_args, model="x")
+
+
+def test_cli_presets_take_a_model():
+    p = make_provider("claude-cli", {"preset": "claude-cli", "model": "sonnet"})
+    assert p.full_command() == ["claude", "-p", "--model", "sonnet"]
+    assert make_provider("codex-cli", {"preset": "codex-cli", "model": "m"}).full_command()[-2:] == ["-m", "m"]
+
+
+def test_provider_capabilities():
+    anth = provider_capabilities(PRESETS["anthropic"])
+    assert anth["api_key"] and anth["model"] and anth["effort"] == ("low", "medium", "high", "xhigh", "max")
+    assert not anth["fetch_models"] and not anth["command"]
+    ollama = provider_capabilities(PRESETS["ollama"])
+    assert ollama["fetch_models"] and ollama["base_url"] and not ollama["api_key"]
+    assert ollama["effort"][0] == ""  # blank = don't send reasoning_effort
+    cli = provider_capabilities(PRESETS["claude-cli"])
+    assert cli["command"] and cli["model"] and cli["effort"] is None and "--model" in cli["model_help"]
+    assert not provider_capabilities({"kind": "command", "command": ["x"]})["model"]
 
 
 def test_command_provider_string_command():

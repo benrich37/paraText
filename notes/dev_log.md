@@ -2,6 +2,24 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-01 (later): model/effort per provider, reader profile
+
+- The setup dialog's rows and choices now come from `providers.provider_capabilities(settings)`: Anthropic has
+  model + effort (`low`…`max`), OpenAI-compatible has model (+ Fetch models) and an optional effort sent as
+  `reasoning_effort` (blank by default; local servers may reject it), subscription CLIs have a model that becomes
+  the tool's model flag via the preset's `model_args` and no effort (those tools don't expose one on the command
+  line, as far as I know; unverified). Help text under each field explains the trade-off. Model and effort are in
+  `cache_key`, so changing them regenerates explanations.
+- Research on "memory of what the user knows" is written up in `notes/user_profile_design.md` (learner models and
+  open learner models from tutoring systems; extract/reconcile memory layers like Mem0 and Letta; why the memory
+  stays local and user-approved here). v1 implements the declared profile: `profile.UserProfile` (TOML, local),
+  the "About you…" dialog, the paragraph appended to the system prompt, `known` concepts excluded from the
+  glossary, and the profile fingerprint in the cache key. `PROMPT_VERSION` bumped to 2. The inferred path (from
+  highlight-and-ask questions) is designed, not built: roadmap items 15–16.
+- Verification: offscreen tests for every new path (effort/model plumbing, capability-driven rows, profile
+  round-trip, prompts, dialog, reader wiring) and rendered screenshots of the three dialogs. Still no live AI
+  call, still unseen on a real screen.
+
 ## 2026-11-01: Qt reader, setup dialog, tooltip colours
 
 The user asked for three things: fix the tooltip colours (white text on tan was unreadable), make provider setup

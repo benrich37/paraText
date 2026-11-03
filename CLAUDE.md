@@ -60,10 +60,20 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
 
   `PRESETS` + `make_provider(name, settings)` build providers from config. Every failure becomes a
   `ProviderError`, which the GUI/CLI show to the user. `PRESET_INFO` (titles, descriptions, suggested models),
-  `preset_status` (is a CLI installed / is a key or model set, without calling anything) and `list_models`
-  (`GET /models` on OpenAI-compatible servers) feed the setup dialog and `paratext providers`.
+  `preset_status` (is a CLI installed / is a key or model set, without calling anything), `list_models`
+  (`GET /models` on OpenAI-compatible servers) and `provider_capabilities(settings)` (which fields a provider
+  kind supports: key, server URL, model, model listing, effort levels, command) feed the setup dialog and
+  `paratext providers`. Effort is `output_config.effort` for Anthropic and `reasoning_effort` (blank = not sent)
+  for OpenAI-compatible servers; subscription CLIs take a model through the preset's `model_args`
+  (`claude -p --model X`, `codex exec -m X`, `gemini -m X`; flags unverified live). Model and effort are part of
+  `cache_key`.
 - **`ai/prompts.py`**: all prompt text plus `PROMPT_VERSION`. Bump it when the wording changes; it is part of the
-  cache key.
+  cache key. `system_prompt(audience, reader_profile)` appends the profile paragraph.
+- **`profile.UserProfile`**: the reader's local profile (`background`, `specialties`, `known`, `needs_help`,
+  `notes`), TOML at `$PARATEXT_PROFILE` or `~/.config/paratext/profile.toml`. `to_prompt()` is appended to the
+  system prompt, `known` concepts are passed to the glossary prompt as needing no entry, and `fingerprint()` is
+  part of the engine's cache key. Only the user writes it in v1; `notes/user_profile_design.md` describes how
+  questions will feed it later.
 - **`engine.ContextEngine`** builds the glossary **per page**. Each request includes the paper context (title + start
   of page 1) and the list of already-known AI terms, to avoid duplicates. The spans for a page are computed from the
   *whole* glossary, so a term found on page 2 is also underlined on page 7. AI entries replace offline acronym
@@ -87,9 +97,11 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   queues every page. Tooltips are `QToolTip.showText(..., rect)` with rich text and explicit colours
   (`TOOLTIP_STYLE`), so they are readable in dark mode and get repositioned at screen edges by Qt.
 - **`reader/setup.SetupDialog`**: list of options (presets grouped as subscription / API key / local, plus custom
-  entries) with a readiness mark, a form whose rows show per provider kind, "Fetch models", "Send a test prompt"
-  (both on `QThreadPool` with `_JobSignals`), and "Save and use", which validates with `make_provider` and writes
-  the config. It edits a deep copy of the config; the window adopts `dialog.config` on accept.
+  entries) with a readiness mark, a form whose rows and choices come from `provider_capabilities`, "Fetch
+  models", "Send a test prompt" (both on `QThreadPool` with `_JobSignals`), and "Save and use", which validates
+  with `make_provider` and writes the config. It edits a deep copy of the config; the window adopts
+  `dialog.config` on accept. `reader/profile_dialog.ProfileDialog` edits the reader profile the same way
+  ("About you…" in the toolbar); the window saves it and rebuilds the engine.
 - **`config.py`**: TOML at `$PARATEXT_CONFIG` or `~/.config/paratext/config.toml`; the cache is at
   `$PARATEXT_CACHE_DIR` or `~/.cache/paratext`. A missing config means offline mode. `Config.save()` writes the
   file (0600, comments dropped; `tomli-w`); the window saves on provider/audience changes. `paratext config --init`

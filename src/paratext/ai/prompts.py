@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 #: bump when prompt wording changes, so cached AI output is not reused
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 
 DEFAULT_AUDIENCE = "an undergraduate science student who is not a specialist in this paper's field"
 
@@ -25,14 +25,17 @@ GLOSSARY_SCHEMA = {
 }
 
 
-def system_prompt(audience: str) -> str:
-    return (
+def system_prompt(audience: str, reader_profile: str = "") -> str:
+    text = (
         f"You are paraText, a reading assistant that helps {audience} understand a scientific paper. "
         "Explain terms accurately and briefly, in the sense they are used in this paper. "
         "Base explanations on the paper text you are given plus standard knowledge of the field; "
         "if the paper's specific meaning is unclear from the text, give the standard meaning and say so. "
         "Never invent results, numbers, or claims about the paper."
     )
+    if reader_profile:
+        text += "\n\n" + reader_profile
+    return text
 
 
 def glossary_prompt(

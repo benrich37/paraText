@@ -36,6 +36,7 @@ from paratext.ai.providers import (
     list_models,
     make_provider,
     preset_status,
+    provider_capabilities,
 )
 from paratext.config import Config
 
@@ -44,7 +45,6 @@ CUSTOM_SETTINGS = {
     "custom-openai": {"kind": "openai", "base_url": "http://localhost:8000/v1", "model": ""},
     "custom-command": {"kind": "command", "command": []},
 }
-EFFORTS = ["low", "medium", "high", "xhigh", "max"]
 TEST_SYSTEM = "You are a connectivity check for the paraText reader."
 TEST_PROMPT = "Reply with the single word OK."
 
@@ -153,10 +153,17 @@ class SetupDialog(QDialog):
         self.model_row = QWidget()
         self.model_row.setLayout(model_row)
         form.addRow("Model:", self.model_row)
+        self.model_note = QLabel()
+        self.model_note.setWordWrap(True)
+        self.model_note.setStyleSheet("color: #868e96;")
+        form.addRow("", self.model_note)
 
         self.effort_combo = QComboBox()
-        self.effort_combo.addItems(EFFORTS)
         form.addRow("Effort:", self.effort_combo)
+        self.effort_note = QLabel()
+        self.effort_note.setWordWrap(True)
+        self.effort_note.setStyleSheet("color: #868e96;")
+        form.addRow("", self.effort_note)
 
         self.command_edit = QLineEdit()
         self.command_edit.setPlaceholderText("program and arguments; the prompt is sent on stdin")
@@ -273,26 +280,38 @@ class SetupDialog(QDialog):
             else:
                 self.key_note.setText(f"Stored privately in your config file. (Or set ${env} and leave this blank.)")
         self.base_url_edit.setText(merged.get("base_url", ""))
+        caps = provider_capabilities(merged)
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
-        if info:
-            self.model_combo.addItems(list(info.suggested_models))
+        suggested = list(info.suggested_models) if info else []
+        if kind == "command" and suggested:
+            suggested.insert(0, "")  # blank = the tool's default model
+        self.model_combo.addItems(suggested)
         self.model_combo.setCurrentText(merged.get("model", ""))
         self.model_combo.blockSignals(False)
-        self.effort_combo.setCurrentText(merged.get("effort", "low"))
+        self.model_note.setText(caps["model_help"])
+        self.effort_combo.blockSignals(True)
+        self.effort_combo.clear()
+        if caps["effort"]:
+            self.effort_combo.addItems(list(caps["effort"]))
+            default = "low" if kind == "anthropic" else ""
+            self.effort_combo.setCurrentText(merged.get("effort", default))
+        self.effort_combo.blockSignals(False)
+        self.effort_note.setText(caps["effort_help"])
         command = merged.get("command") or []
         self.command_edit.blockSignals(True)
         self.command_edit.setText(shlex.join(command) if isinstance(command, list) else command)
         self.command_edit.blockSignals(False)
 
-        show_key = kind == "anthropic" or (kind == "openai" and bool(env))
-        self.form.setRowVisible(self.key_row, show_key)
-        self.form.setRowVisible(self.key_note, show_key)
-        self.form.setRowVisible(self.base_url_edit, kind == "openai")
-        self.form.setRowVisible(self.model_row, kind in ("openai", "anthropic"))
-        self.fetch_button.setVisible(kind == "openai")
-        self.form.setRowVisible(self.effort_combo, kind == "anthropic")
-        self.form.setRowVisible(self.command_edit, kind == "command")
+        self.form.setRowVisible(self.key_row, caps["api_key"])
+        self.form.setRowVisible(self.key_note, caps["api_key"])
+        self.form.setRowVisible(self.base_url_edit, caps["base_url"])
+        self.form.setRowVisible(self.command_edit, caps["command"])
+        self.form.setRowVisible(self.model_row, caps["model"])
+        self.form.setRowVisible(self.model_note, caps["model"] and bool(caps["model_help"]))
+        self.fetch_button.setVisible(caps["fetch_models"])
+        self.form.setRowVisible(self.effort_combo, caps["effort"] is not None)
+        self.form.setRowVisible(self.effort_note, caps["effort"] is not None)
         self._update_status()
         self.form.invalidate()
         self.form.activate()
@@ -313,16 +332,25 @@ class SetupDialog(QDialog):
             settings["api_key"] = key
         else:
             settings.pop("api_key", None)
-        if kind in ("openai", "anthropic"):
-            settings["model"] = self.model_combo.currentText().strip()
+        caps = provider_capabilities(merged)
+        if caps["model"]:
+            model = self.model_combo.currentText().strip()
+            if model or kind != "command":
+                settings["model"] = model
+            else:
+                settings.pop("model", None)
         if kind == "openai":
             url = self.base_url_edit.text().strip()
             if url and url != preset.get("base_url"):
                 settings["base_url"] = url
             elif url:
                 settings.pop("base_url", None)
-        if kind == "anthropic":
-            settings["effort"] = self.effort_combo.currentText()
+        if caps["effort"] is not None:
+            effort = self.effort_combo.currentText()
+            if effort:
+                settings["effort"] = effort
+            else:
+                settings.pop("effort", None)
         if kind == "command":
             settings["command"] = shlex.split(self.command_edit.text())
         return settings

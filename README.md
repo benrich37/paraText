@@ -27,9 +27,15 @@ paratext read paper.pdf             # the GUI (or just: paratext paper.pdf)
 ```
 
 The first time, press **Set up AI…** in the toolbar (or run `paratext setup`). The dialog lists every way to
-connect, shows which ones are ready on your machine, lets you paste an API key or pick a model, sends a test
-prompt, and saves the choice to `~/.config/paratext/config.toml`. Editing that file by hand works too
-(`paratext config --init` writes a commented template).
+connect, shows which ones are ready on your machine, lets you paste an API key, pick a model and (where the
+provider supports it) a reasoning-effort level, sends a test prompt, and saves the choice to
+`~/.config/paratext/config.toml`. Editing that file by hand works too (`paratext config --init` writes a
+commented template).
+
+**About you…** opens your reader profile: your background, areas you know deeply, concepts that need no
+explanation, and concepts you want explained carefully every time. It is stored locally in
+`~/.config/paratext/profile.toml` and added to every prompt, so explanations are pitched at you rather than at a
+generic audience. See `notes/user_profile_design.md` for where this is going.
 
 Command-line tools that share the same cache:
 

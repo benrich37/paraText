@@ -9,10 +9,12 @@ Ordered by priority. Update this file when you finish or discover something. Sta
    mode, tooltip contrast, dialog field widths, that the "Fit width" zoom on open looks right on a Retina display.
 
 1. **Live-test each provider route with real accounts.** No live call has been made yet (see `dev_log.md`).
-   - `claude-cli`: `["claude", "-p"]` with the prompt on stdin. Believed correct; confirm that it doesn't try to use
-     tools, and check its startup latency.
-   - `codex-cli`: `["codex", "exec", "-"]`. **Unverified**: confirm that `-` reads stdin in the current Codex CLI.
-   - `gemini-cli`: `["gemini"]` with stdin. **Unverified** flags.
+   - `claude-cli`: `["claude", "-p"]` with the prompt on stdin, model via `--model X`. Believed correct; confirm
+     that it doesn't try to use tools, and check its startup latency.
+   - `codex-cli`: `["codex", "exec", "-"]`, model via `-m X`. **Unverified**: confirm that `-` reads stdin in the
+     current Codex CLI.
+   - `gemini-cli`: `["gemini"]` with stdin, model via `-m X`. **Unverified** flags.
+   - `openai` effort: `reasoning_effort` values (`low`/`medium`/`high`) and which models accept it.
    - `gemini` (OpenAI-compatible endpoint `.../v1beta/openai`): confirm the base URL and that `response_format` is
      omitted unless `json_mode`.
    - `anthropic`: confirm that `fallbacks="default"` + `output_config.format` + `effort` are accepted together on
@@ -40,6 +42,18 @@ Ordered by priority. Update this file when you finish or discover something. Sta
 10. Scanned PDFs have no text layer, so they produce no words. An OCR option via PyMuPDF + Tesseract could fix this.
 11. Export an annotated PDF (PyMuPDF annotations) or a glossary appendix.
 12. A small eval set for glossary quality (precision of chosen terms, accuracy of explanations, match rate).
+
+## Reader profile (see `notes/user_profile_design.md`)
+
+15. **Highlight and ask.** A question box for the current selection (or a term) that answers in context and
+    keeps a per-paper Q&A history in the side panel. This is the feature that will feed the profile.
+16. **Inferred profile updates.** With each answer, request a structured side-channel of proposed profile
+    updates with evidence and confidence; show them as pending suggestions in the profile dialog; promote only
+    on a second piece of evidence or user acceptance. Store accepted and rejected ones in `notes` with
+    provenance.
+17. Weak signals from reading behaviour (repeated hovers → `needs_help`), as suggestions only.
+18. Per-paper prerequisite graph between glossary entries, so a `needs_help` concept is explained after its
+    unknown prerequisites.
 
 ## Bigger ideas
 

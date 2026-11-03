@@ -36,12 +36,21 @@ def test_command_preset_status(dialog_factory, monkeypatch):
     assert dialog.selected_name == "claude-cli"
     assert "not installed" in dialog.status_label.text()
     assert not dialog.command_edit.isHidden()
-    assert dialog.key_row.isHidden() and dialog.model_row.isHidden()
+    assert dialog.key_row.isHidden()
     assert dialog.command_edit.text() == "claude -p"
+    # subscription CLIs take a model (blank = the tool's default) but no effort
+    assert not dialog.model_row.isHidden() and dialog.effort_combo.isHidden()
+    assert dialog.fetch_button.isHidden()
+    assert dialog.model_combo.currentText() == "" and "--model" in dialog.model_note.text()
     monkeypatch.setattr("shutil.which", lambda cmd: "/bin/" + cmd)
-    dialog.command_edit.setText("claude -p --model sonnet")
+    dialog.command_edit.setText("claude -p --verbose")
     assert dialog.status_label.text().startswith("✓")
-    assert dialog.current_settings() == {"preset": "claude-cli", "command": ["claude", "-p", "--model", "sonnet"]}
+    assert dialog.current_settings() == {"preset": "claude-cli", "command": ["claude", "-p", "--verbose"]}
+    dialog.model_combo.setCurrentText("sonnet")
+    assert dialog.current_settings()["model"] == "sonnet"
+    dialog.accept()
+    saved = Config.load(dialog.config.path)
+    assert saved.make_provider("claude-cli").full_command() == ["claude", "-p", "--verbose", "--model", "sonnet"]
 
 
 def test_anthropic_form_and_save(dialog_factory, tmp_path, monkeypatch):
@@ -52,6 +61,14 @@ def test_anthropic_form_and_save(dialog_factory, tmp_path, monkeypatch):
     assert dialog.fetch_button.isHidden() and dialog.base_url_edit.isHidden()
     assert "ANTHROPIC_API_KEY" in dialog.status_label.text()
     assert dialog.model_combo.currentText() == "claude-opus-5-5"
+    assert [dialog.effort_combo.itemText(i) for i in range(dialog.effort_combo.count())] == [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+    ]
+    assert dialog.effort_combo.currentText() == "low" and "cost" in dialog.effort_note.text()
     dialog.key_edit.setText("sk-ant-test")
     dialog.model_combo.setCurrentText("claude-sonnet-5-5")
     dialog.effort_combo.setCurrentText("medium")
@@ -70,6 +87,19 @@ def test_anthropic_form_and_save(dialog_factory, tmp_path, monkeypatch):
     }
     if os.name != "nt":
         assert oct((tmp_path / "config.toml").stat().st_mode & 0o777) == "0o600"
+
+
+def test_openai_effort_is_optional(dialog_factory, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk")
+    dialog = dialog_factory(current="openai")
+    assert not dialog.effort_combo.isHidden()
+    assert dialog.effort_combo.currentText() == "" and "reasoning_effort" in dialog.effort_note.text()
+    dialog.model_combo.setCurrentText("some-model")
+    assert "effort" not in dialog.current_settings()
+    dialog.effort_combo.setCurrentText("medium")
+    assert dialog.current_settings()["effort"] == "medium"
+    dialog.select("ollama")
+    assert dialog.effort_combo.currentText() == ""  # local servers: blank by default
 
 
 def test_save_refuses_unusable_settings(dialog_factory, tmp_path):

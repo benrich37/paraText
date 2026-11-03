@@ -38,7 +38,9 @@ from paratext.ai.providers import ProviderError
 from paratext.config import Config
 from paratext.engine import ContextEngine
 from paratext.pdf import PdfDocument
+from paratext.profile import UserProfile
 from paratext.reader.pageview import UNDERLINE_COLORS, DocumentView, TermSpan, line_rects
+from paratext.reader.profile_dialog import ProfileDialog
 from paratext.reader.setup import SetupDialog
 
 # Explicit colours so the tooltip reads the same in light and dark themes
@@ -58,9 +60,17 @@ class EngineSignals(QObject):
 
 
 class ReaderWindow(QMainWindow):
-    def __init__(self, config: Config | None = None, pdf_path=None, provider_name=None, executor=None):
+    def __init__(
+        self,
+        config: Config | None = None,
+        pdf_path=None,
+        provider_name=None,
+        executor=None,
+        profile: UserProfile | None = None,
+    ):
         super().__init__()
         self.config = config or Config()
+        self.profile = profile or UserProfile()
         self.executor = executor
         self.provider_name = provider_name or self.config.default_provider or "none"
         self.audience = self.config.audience
@@ -148,6 +158,10 @@ class ReaderWindow(QMainWindow):
         self.audience_edit.editingFinished.connect(lambda: self.set_audience(self.audience_edit.text()))
         self.audience_edit.setCursorPosition(0)
         bar.addWidget(self.audience_edit)
+        self.profile_button = QPushButton("About you…")
+        self.profile_button.setToolTip("Tell the model what you know well and what needs careful explanation")
+        self.profile_button.clicked.connect(self.open_profile)
+        bar.addWidget(self.profile_button)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.view = DocumentView()
@@ -266,7 +280,12 @@ class ReaderWindow(QMainWindow):
         except ProviderError as e:
             provider, provider_error = None, e
         self.engine = ContextEngine(
-            self.doc, provider, self.config.cache_dir, self.audience, executor=self._new_executor()
+            self.doc,
+            provider,
+            self.config.cache_dir,
+            self.audience,
+            executor=self._new_executor(),
+            profile=self.profile,
         )
         self._glossary_version += 1
         for item in self.view.items:
@@ -332,6 +351,18 @@ class ReaderWindow(QMainWindow):
             self.audience_edit.setCursorPosition(0)
             self._fill_provider_box()
             self.set_provider(dialog.selected_name)
+
+    def open_profile(self) -> None:
+        dialog = ProfileDialog(self.profile, parent=self)
+        if dialog.exec():
+            self.profile = dialog.profile
+            try:
+                self.profile.save()
+            except OSError as e:
+                self.statusBar().showMessage(f"Could not save your profile: {e}")
+            if self.doc:
+                self._make_engine()
+            self.statusBar().showMessage("Profile saved; explanations will use it from now on.")
 
     # ------------------------------------------------------------------
     # pages and glossary
@@ -518,6 +549,6 @@ def run(pdf_path=None, provider_name=None, config_path=None) -> int:
     import sys
 
     app = QApplication.instance() or QApplication(sys.argv)
-    window = ReaderWindow(Config.load(config_path), pdf_path, provider_name)
+    window = ReaderWindow(Config.load(config_path), pdf_path, provider_name, profile=UserProfile.load())
     window.show()
     return app.exec()

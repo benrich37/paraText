@@ -19,6 +19,7 @@ from paratext.ai import prompts
 from paratext.ai.providers import Provider, ProviderError
 from paratext.glossary import GlossaryEntry, Span, extract_acronyms, find_spans, normalize_term, parse_terms
 from paratext.pdf import PdfDocument
+from paratext.profile import UserProfile
 
 CACHE_VERSION = 1
 
@@ -43,10 +44,12 @@ class ContextEngine:
         cache_dir=None,
         audience: str = prompts.DEFAULT_AUDIENCE,
         executor: Executor | None = None,
+        profile: UserProfile | None = None,
     ):
         self.doc = doc
         self.provider = provider
         self.audience = audience
+        self.profile = profile or UserProfile()
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.executor = executor or ThreadPoolExecutor(max_workers=2, thread_name_prefix="paratext")
         self._lock = threading.Lock()
@@ -66,7 +69,7 @@ class ContextEngine:
         if self.cache_dir is None:
             return None
         provider_key = self.provider.cache_key if self.provider else "offline"
-        settings = f"{provider_key}|{self.audience}|{prompts.PROMPT_VERSION}"
+        settings = f"{provider_key}|{self.audience}|{prompts.PROMPT_VERSION}|{self.profile.fingerprint()}"
         tag = hashlib.sha1(settings.encode()).hexdigest()[:10]
         return self.cache_dir / f"{self.doc.sha256[:16]}-{tag}.json"
 
@@ -94,6 +97,7 @@ class ContextEngine:
                 "document": str(self.doc.path),
                 "provider": self.provider.cache_key if self.provider else None,
                 "audience": self.audience,
+                "reader_profile": self.profile.to_prompt(),
                 "processed_pages": sorted(self.processed_pages),
                 "terms": {k: e.to_dict() for k, e in self.terms.items()},
                 "explanations": self.explanations,
@@ -142,10 +146,12 @@ class ContextEngine:
             raise ProviderError("No AI provider configured.")
         with self._lock:
             known = [e.term for e in self.terms.values() if e.source != "acronym"]
+        # concepts the reader already understands need no glossary entry
+        known = self.profile.known + known
         prompt = prompts.glossary_prompt(
             self.doc.paper_context(), page + 1, self.doc.page_text(page), self.audience, known
         )
-        reply = self.provider.complete(prompts.system_prompt(self.audience), prompt, prompts.GLOSSARY_SCHEMA)
+        reply = self.provider.complete(self.system_prompt(), prompt, prompts.GLOSSARY_SCHEMA)
         try:
             entries = parse_terms(reply, page)
         except ValueError as e:
@@ -155,6 +161,9 @@ class ContextEngine:
             self.processed_pages.add(page)
         self.save()
         return entries
+
+    def system_prompt(self) -> str:
+        return prompts.system_prompt(self.audience, self.profile.to_prompt())
 
     def ensure_page(self, page: int, callback: Callable | None = None) -> Future | None:
         """Start building page ``page``'s glossary unless it is done or running.
@@ -187,7 +196,7 @@ class ContextEngine:
         prompt = prompts.explain_prompt(
             self.doc.paper_context(), phrase, self.doc.passage(page, start, end), page + 1, self.audience, detailed
         )
-        text = self.provider.complete(prompts.system_prompt(self.audience), prompt).strip()
+        text = self.provider.complete(self.system_prompt(), prompt).strip()
         with self._lock:
             self.explanations[self.explanation_key(phrase, page, detailed)] = text
         self.save()
