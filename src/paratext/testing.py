@@ -92,3 +92,17 @@ class FakeProvider:
         page = " ".join(page.split()).lower()
         terms = [{"term": t, "explanation": e} for t, e in self.glossary.items() if t.lower() in page]
         return "Here you go:\n```json\n" + json.dumps({"terms": terms}) + "\n```"
+
+
+class FakeIssueProvider(FakeProvider):
+    """Answers the "Log an issue" prompt with a fixed structured write-up (FakeProvider only knows glossary pages)."""
+
+    writeup = {"title": "Tooltip hides page text", "category": "ui", "description": "The tooltip covers the term."}
+
+    def complete(self, system, prompt, json_schema=None):
+        import json
+
+        self.calls.append({"system": system, "prompt": prompt, "json_schema": json_schema})
+        if self.error is not None:
+            raise self.error
+        return "Sure:\n" + json.dumps(self.writeup)

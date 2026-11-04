@@ -11,8 +11,10 @@ paraText adds audience-targeted context to technical text. It has two parts:
 - **`ParaText` widget**: the original 2022 course project, kept as a legacy proof of concept. It is a `tk.Text`
   whose underlined spans offer right-click replacement options. Don't build new features on tkinter.
 
-**Read `notes/roadmap.md` (open items and what to do next) and `notes/dev_log.md` (decisions and history) before
-starting work.** Add to both when you finish a chunk of work.
+**Read `notes/roadmap.md` (open items and what to do next), `notes/ReportedIssues.md` (issues the user logged
+from inside the reader while testing; address the ones with `Status: open` and update their status) and
+`notes/dev_log.md` (decisions and history) before starting work.** Add to the roadmap and dev log when you finish
+a chunk of work.
 
 ## Commands
 
@@ -104,6 +106,12 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   with `make_provider` and writes the config. It edits a deep copy of the config; the window adopts
   `dialog.config` on accept. `reader/profile_dialog.ProfileDialog` edits the reader profile the same way
   ("About you…" in the toolbar); the window saves it and rebuilds the engine.
+- **`issues.py`**: the reader's "Log an issue" box. `log_issue(note, IssueContext, provider)` always appends the
+  verbatim note plus context (paper, page, provider, audience, panel title) to `notes/ReportedIssues.md` (found
+  through `repo_root()`: the `pyproject.toml` above the package, i.e. an editable install; else
+  `~/.config/paratext/`; `$PARATEXT_ISSUES` overrides). With a provider it first asks for a JSON
+  title/category/description (`prompts.issue_prompt`, `ISSUE_SCHEMA`); provider failures are noted in the entry,
+  never raised. The window runs it on `QThreadPool` (`_IssueJob`) and reports in the status bar.
 - **`macapp.py`**: writes the macOS bundle (`Info.plist` claiming `com.adobe.pdf` at rank Alternate, a shell
   launcher that `exec`s `sys.executable -m paratext read` with the installer's `PATH` baked in, output to
   `~/Library/Logs/paraText.log`, an icon drawn with QPainter + `iconutil`), then registers it with `lsregister`.

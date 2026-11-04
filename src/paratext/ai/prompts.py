@@ -110,3 +110,39 @@ def question_prompt(paper_text: str, question: str, audience: str, truncated: bo
         "paper shows from what it assumes or cites. Be concise: a short paragraph or a few sentences, or a short "
         "list if the question has several parts. Write plain text without headings or markdown."
     )
+
+
+# --- issue reports from the reader's "Log an issue" box -------------------------------------------------------
+
+ISSUE_SYSTEM_PROMPT = (
+    "You turn a tester's quick note about the paraText PDF reader (a desktop app that underlines terms in "
+    "scientific papers and explains them with an AI model) into a clear issue entry for the developer. Keep the "
+    "tester's meaning exactly; do not add requirements they did not state, and do not guess at causes."
+)
+
+ISSUE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "description": "at most 10 words, specific"},
+        "category": {"type": "string", "enum": ["bug", "ui", "explanation-quality", "performance", "feature", "other"]},
+        "description": {"type": "string", "description": "2 to 4 sentences: what happens, what was expected"},
+    },
+    "required": ["title", "category", "description"],
+    "additionalProperties": False,
+}
+
+
+def issue_prompt(note: str, context_lines: list[str]) -> str:
+    context = "\n".join(context_lines) or "(no document open)"
+    return (
+        "<context>\n"
+        f"{context}\n"
+        "</context>\n\n"
+        "<note>\n"
+        f"{note}\n"
+        "</note>\n\n"
+        "Write the issue entry: a specific title of at most 10 words, a category (bug, ui, explanation-quality, "
+        "performance, feature or other) and a description of 2 to 4 sentences stating what happens and what the "
+        "tester expected instead, using the context where it helps. "
+        'Return only a JSON object of the form {"title": "...", "category": "...", "description": "..."}.'
+    )

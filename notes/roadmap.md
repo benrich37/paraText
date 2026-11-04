@@ -1,6 +1,6 @@
 # Roadmap and open items
 
-Ordered by priority. Update this file when you finish or discover something. Status as of 2026-11-03.
+Ordered by priority. Update this file when you finish or discover something. Status as of 2026-11-04. Also check `ReportedIssues.md` for issues logged from the reader.
 
 ## Next up (verify what exists)
 

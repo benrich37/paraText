@@ -2,6 +2,20 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-04: "Log an issue" box
+
+- A single-line box at the bottom of the side panel; Enter appends an entry to `notes/ReportedIssues.md`
+  (`issues.py`). The file is found by walking up from the package to `pyproject.toml`, which only exists for an
+  editable install (the development setup, and what the macOS bundle runs); otherwise the file goes to the config
+  dir, and `$PARATEXT_ISSUES` overrides both. The file was created with its header so CLAUDE.md can point at it.
+- The verbatim note is the record; the AI write-up (title, category, 2-4 sentence description, via a JSON schema
+  on the *current* provider) is a convenience and must never block logging: provider errors go into the entry as
+  "No AI write-up: ...", and the status bar says so. Context captured: paper, current page, provider cache key
+  (name, model, effort), audience and the side-panel title, so a quality complaint can be reproduced.
+- The write-up runs on the global `QThreadPool` rather than the engine's executor because the box also works
+  with no document (and hence no engine) open.
+- Tests use `testing.FakeIssueProvider`; `FakeProvider` cannot answer a schema prompt that has no `<page>`.
+
 ## 2026-11-03 (later): "Ask about the paper as a whole"
 
 - A question box under the side panel (`ReaderWindow.ask_question`), `ContextEngine.ask`/`ask_job`, and

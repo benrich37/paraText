@@ -16,6 +16,10 @@ Open a PDF and paraText underlines the terms on each page that your chosen audie
 - **Ask about the paper as a whole** in the box under the side panel ("does this paper show that X causes Y?").
   The question goes to the model with the full text of the paper, and the answer says where in the paper the
   support is, or that there is none. Answers are kept per paper, and earlier questions are listed under the latest.
+- **Log an issue** (the box at the bottom of the side panel) saves a note about something wrong or wanted, with
+  what was open at the time, to `notes/ReportedIssues.md` in the source checkout (or `~/.config/paratext/` for a
+  non-editable install). The configured model adds a title and a short write-up. The file is a to-do list for
+  development sessions.
 - Change **Explain for:** (e.g. "a high-school student", "a chemist new to electrocatalysis") to retarget everything.
 
 Orange underlines are AI explanations. Blue underlines are acronyms defined in the paper itself ("density functional

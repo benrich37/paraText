@@ -15,7 +15,7 @@ import html
 import logging
 import os
 
-from PySide6.QtCore import QEvent, QObject, QPoint, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 from paratext.ai.providers import ProviderError
 from paratext.config import Config
 from paratext.engine import ContextEngine
+from paratext.issues import IssueContext, issues_path, log_issue
 from paratext.pdf import PdfDocument
 from paratext.profile import UserProfile
 from paratext.reader.pageview import UNDERLINE_COLORS, DocumentView, TermSpan, line_rects
@@ -62,6 +63,21 @@ class EngineSignals(QObject):
     page_done = Signal(int, object, object)  # page, entries, error
     explained = Signal(str, object, object)  # phrase, text, error
     answered = Signal(str, object, object)  # question, answer, error
+    issue_logged = Signal(object, object)  # (path, ai_problem), error
+
+
+class _IssueJob(QRunnable):
+    """Runs ``log_issue`` (which may call the provider) off the GUI thread."""
+
+    def __init__(self, fn, signals: EngineSignals):
+        super().__init__()
+        self.fn, self.signals = fn, signals
+
+    def run(self) -> None:
+        try:
+            self.signals.issue_logged.emit(self.fn(), None)
+        except Exception as e:  # shown in the status bar
+            self.signals.issue_logged.emit(None, e)
 
 
 class ReaderWindow(QMainWindow):
@@ -87,6 +103,8 @@ class ReaderWindow(QMainWindow):
         self._signals.page_done.connect(self._on_page_done)
         self._signals.explained.connect(self._on_explained)
         self._signals.answered.connect(self._on_answered)
+        self._signals.issue_logged.connect(self._on_issue_logged)
+        self.pool = QThreadPool.globalInstance()
 
         self.setWindowTitle("paraText reader")
         self.resize(1200, 850)
@@ -227,6 +245,15 @@ class ReaderWindow(QMainWindow):
         self.ask_button.clicked.connect(self.ask_question)
         ask_row.addWidget(self.ask_button)
         layout.addLayout(ask_row)
+        issue_label = QLabel("Log an issue with paraText (saved for a later development session):")
+        issue_label.setStyleSheet("margin-top: 6px; color: #868e96;")
+        layout.addWidget(issue_label)
+        self.issue_edit = QLineEdit()
+        self.issue_edit.setPlaceholderText("what went wrong or what you want changed; Enter to save")
+        self.issue_edit.setClearButtonEnabled(True)
+        self.issue_edit.setToolTip(f"Appends to {issues_path()}; the current AI model adds a title and write-up")
+        self.issue_edit.returnPressed.connect(self.log_issue_note)
+        layout.addWidget(self.issue_edit)
         splitter.addWidget(side)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
@@ -605,6 +632,44 @@ class ReaderWindow(QMainWindow):
             return ""
         blocks = [f"Q: {q['question']}\nA: {q['answer']}" for q in earlier[:limit]]
         return "\n\n— Earlier questions —\n\n" + "\n\n".join(blocks)
+
+    # ------------------------------------------------------------------
+    # issue log for testing sessions
+    # ------------------------------------------------------------------
+
+    def issue_context(self) -> IssueContext:
+        provider = self.engine.provider if self.engine else None
+        return IssueContext(
+            document=self.doc.title if self.doc else "",
+            path=str(self.doc.path) if self.doc else "",
+            page=self.current_page() + 1 if self.doc else None,
+            page_count=self.doc.page_count if self.doc else None,
+            provider=provider.cache_key if provider else "none",
+            audience=self.audience,
+            panel_title=self.panel_title.text(),
+        )
+
+    def log_issue_note(self) -> None:
+        note = self.issue_edit.text().strip()
+        if not note:
+            return
+        context = self.issue_context()
+        provider = self.engine.provider if self.engine else None
+        self.issue_edit.setEnabled(False)
+        self.statusBar().showMessage("Logging the issue…")
+        self.pool.start(_IssueJob(lambda: log_issue(note, context, provider), self._signals))
+
+    def _on_issue_logged(self, result, error) -> None:
+        self.issue_edit.setEnabled(True)
+        if error:
+            self.statusBar().showMessage(f"Could not log the issue: {error}")
+            return
+        path, problem = result
+        self.issue_edit.clear()
+        self.issue_edit.setFocus()
+        suffix = f" (without AI write-up: {problem})" if problem else ""
+        self.statusBar().showMessage(f"Issue logged to {path}{suffix}", 8000)
+        log.info("issue logged to %s%s", path, suffix)
 
 
 class FileOpenHandler(QObject):

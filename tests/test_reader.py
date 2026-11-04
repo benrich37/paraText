@@ -236,3 +236,18 @@ def test_ask_about_whole_paper(window_factory):
 def test_ask_disabled_without_ai(window_factory):
     window = window_factory(None, provider_name="none")
     assert not window.ask_button.isEnabled() and not window.ask_edit.isEnabled()
+
+
+def test_log_issue_box(window_factory, qtbot, tmp_path, monkeypatch):
+    from paratext.testing import FakeIssueProvider
+
+    monkeypatch.setenv("PARATEXT_ISSUES", str(tmp_path / "issues.md"))
+    window = window_factory(FakeIssueProvider())
+    window.go_to(1)
+    window.issue_edit.setText("the underline is too thick")
+    QTest.keyClick(window.issue_edit, Qt.Key.Key_Return)
+    qtbot.waitUntil(lambda: window.issue_edit.isEnabled() and window.issue_edit.text() == "", timeout=5000)
+    text = (tmp_path / "issues.md").read_text()
+    assert "Tooltip hides page text" in text and "> the underline is too thick" in text
+    assert "A Study of Catalysis (page 2 of" in text and "AI: fake" in text
+    assert "Issue logged to" in window.statusBar().currentMessage()
