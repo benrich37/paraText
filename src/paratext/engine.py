@@ -69,6 +69,7 @@ class ContextEngine:
         self.processed_pages: set[int] = set()
         self.explanations: dict[str, str] = {}
         self.questions: list[dict] = []  # [{"question", "answer"}] in the order asked
+        self.explained: list[dict] = []  # selections the reader asked to explain: {"phrase", "page", "start", "end"}
         self._load_cache()
         self._add_acronyms()
 
@@ -100,6 +101,7 @@ class ContextEngine:
         self.processed_pages = set(data.get("processed_pages", []))
         self.explanations = dict(data.get("explanations", {}))
         self.questions = [q for q in data.get("questions", []) if "question" in q and "answer" in q]
+        self.explained = [e for e in data.get("explained", []) if {"phrase", "page", "start", "end"} <= set(e)]
 
     def save(self) -> None:
         path = self.cache_path
@@ -116,6 +118,7 @@ class ContextEngine:
                 "terms": {k: e.to_dict() for k, e in self.terms.items()},
                 "explanations": self.explanations,
                 "questions": self.questions,
+                "explained": self.explained,
             }
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
@@ -272,8 +275,15 @@ class ContextEngine:
         text = self.provider.complete(self.system_prompt(), prompt).strip()
         with self._lock:
             self.explanations[self.explanation_key(phrase, page, detailed)] = text
+            if not any(e["page"] == page and e["start"] == start and e["end"] == end for e in self.explained):
+                self.explained.append({"phrase": phrase, "page": page, "start": start, "end": end})
         self.save()
         return text
+
+    def explained_spans(self, page: int) -> list[dict]:
+        """Selections on ``page`` that already have an explanation (so the reader can bring it back)."""
+        with self._lock:
+            return [dict(e) for e in self.explained if e["page"] == page]
 
     def explain(
         self, phrase: str, page: int, start: int, end: int, detailed: bool = False, callback: Callable | None = None

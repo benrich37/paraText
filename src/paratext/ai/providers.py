@@ -50,6 +50,11 @@ class Provider:
     def cache_key(self) -> str:
         return self.name
 
+    @property
+    def summary(self) -> str:
+        """Model and settings in words, for the main window ("claude-opus-5-5, effort low")."""
+        return self.cache_key
+
 
 def _resolve_api_key(api_key: str | None, api_key_env: str | None, required: bool) -> str | None:
     if api_key:
@@ -85,6 +90,10 @@ class OpenAICompatibleProvider(Provider):
     @property
     def cache_key(self) -> str:
         return f"{self.name}:{self.model}" + (f":{self.effort}" if self.effort else "")
+
+    @property
+    def summary(self) -> str:
+        return self.model + (f", effort {self.effort}" if self.effort else "")
 
     def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
         key = _resolve_api_key(self.api_key, self.api_key_env, required=self.api_key_env is not None)
@@ -139,6 +148,10 @@ class AnthropicProvider(Provider):
     @property
     def cache_key(self) -> str:
         return f"{self.name}:{self.model}" + (f":{self.effort}" if self.effort else "")
+
+    @property
+    def summary(self) -> str:
+        return f"{self.model}, effort {self.effort or 'default'}"
 
     def _client(self, anthropic):
         key = _resolve_api_key(self.api_key, self.api_key_env, required=self.api_key_env is not None)
@@ -216,6 +229,13 @@ class CommandProvider(Provider):
     @property
     def cache_key(self) -> str:
         return f"{self.name}:{' '.join(self.full_command())}"
+
+    @property
+    def summary(self) -> str:
+        parts = [f"model {self.model}" if self.model else "default model"]
+        if self.effort_args:
+            parts.append(f"effort {self.effort or 'default'}")
+        return f"{self.command[0]}: " + ", ".join(parts)
 
     def full_command(self) -> list[str]:
         """The command with the model flag filled in."""

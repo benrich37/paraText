@@ -186,3 +186,17 @@ def test_claude_cli_effort_and_model_check(dialog_factory, qtbot, monkeypatch):
         "low",
     ]
     QThreadPool.globalInstance().waitForDone()
+
+
+def test_claude_cli_model_and_effort_round_trip(dialog_factory, tmp_path, monkeypatch):
+    """What was saved is what the dialog shows after a relaunch."""
+    monkeypatch.setattr("shutil.which", lambda cmd: "/bin/" + cmd)
+    dialog = dialog_factory(current="claude-cli")
+    dialog.model_combo.setCurrentText("fable")
+    dialog.effort_combo.setCurrentText("low")
+    dialog.accept()
+    saved = Config.load(dialog.config.path)
+    assert saved.providers["claude-cli"]["model"] == "fable" and saved.providers["claude-cli"]["effort"] == "low"
+    again = dialog_factory(saved, current="claude-cli")
+    assert again.model_combo.currentText() == "fable" and again.effort_combo.currentText() == "low"
+    assert saved.make_provider("claude-cli").summary == "claude: model fable, effort low"

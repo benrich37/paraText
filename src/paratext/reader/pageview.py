@@ -36,10 +36,10 @@ def line_rects(words, start: int, end: int) -> list[QRectF]:
 class TermSpan:
     """A glossary span on a page with its line boxes and underline colour."""
 
-    __slots__ = ("span", "rects", "color")
+    __slots__ = ("span", "rects", "color", "kind")
 
-    def __init__(self, span: Span, rects: list[QRectF], color: str):
-        self.span, self.rects, self.color = span, rects, color
+    def __init__(self, span: Span, rects: list[QRectF], color: str, kind: str = "term"):
+        self.span, self.rects, self.color, self.kind = span, rects, color, kind  # kind: "term" or "explained"
 
     def contains(self, pos) -> bool:
         return any(r.contains(pos) for r in self.rects)
@@ -105,6 +105,8 @@ class PageItem(QGraphicsItem):
             painter.setPen(pen)
             for r in term.rects:
                 painter.drawLine(r.bottomLeft() + QPointF(0, 1), r.bottomRight() + QPointF(0, 1))
+                if term.kind == "explained":  # a second line marks a selection that already has an explanation
+                    painter.drawLine(r.bottomLeft() + QPointF(0, 4), r.bottomRight() + QPointF(0, 4))
         if self.hover_span is not None:
             pen = QPen(QColor(HOVER_COLOR), 1)
             pen.setCosmetic(True)
@@ -134,6 +136,10 @@ class PageItem(QGraphicsItem):
             if term.contains(pos):
                 return term
         return None
+
+    def spans_at(self, pos) -> list[TermSpan]:
+        """Every span under ``pos``: a glossary term may sit inside an explained selection."""
+        return [term for term in self.spans if term.contains(pos)]
 
     def set_hover(self, term: TermSpan | None, screen_pos: QPoint | None = None) -> None:
         if term is self.hover_span:
@@ -170,9 +176,9 @@ class PageItem(QGraphicsItem):
     def mouseReleaseEvent(self, event) -> None:
         anchor, self._anchor = self._anchor, None
         if not self._dragged:
-            term = self.span_at(event.pos())
-            if term is not None:
-                self.view.termClicked.emit(self.page, term)
+            terms = self.spans_at(event.pos())
+            if terms:
+                self.view.termClicked.emit(self.page, terms)
                 return
             if anchor is None:
                 return
@@ -227,7 +233,7 @@ class PixmapCache:
 
 class DocumentView(QGraphicsView):
     termHovered = Signal(int, object, QPoint)  # page, TermSpan or None, screen position
-    termClicked = Signal(int, object)  # page, TermSpan
+    termClicked = Signal(int, object)  # page, list[TermSpan] under the click (first = topmost)
     selectionChanged = Signal(int, int, int)  # page, first word, last word
     currentPageChanged = Signal(int)
     visiblePagesChanged = Signal()

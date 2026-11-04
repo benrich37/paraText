@@ -353,3 +353,14 @@ def test_probe_claude_models(tmp_path, monkeypatch):
     }
     with pytest.raises(ProviderError, match="not installed"):
         probe_claude_models(["definitely-not-a-real-command-xyz", "-p"])
+
+
+def test_provider_summaries():
+    assert make_provider("claude-cli", {"preset": "claude-cli"}).summary == "claude: default model, effort default"
+    assert make_provider("claude-cli", {"preset": "claude-cli", "model": "opus", "effort": "max"}).summary == (
+        "claude: model opus, effort max"
+    )
+    assert make_provider("ollama", {"preset": "ollama", "model": "llama3"}).summary == "llama3"
+    assert make_provider("openai", {"preset": "openai", "model": "o3", "effort": "high", "api_key": "k"}).summary == (
+        "o3, effort high"
+    )

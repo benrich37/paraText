@@ -263,3 +263,12 @@ def test_describe_link(doc, tmp_path):
     assert 'linked the pdf "si.pdf"' in prompt and "<sample>" in prompt and "Supporting Information" in prompt
     stored = store.find(doc.sha256, si)
     assert stored.description.startswith("XRD patterns") and stored.description_by == "fake"
+
+
+def test_explained_selections_are_recorded(doc, tmp_path):
+    engine = make_engine(doc, tmp_path, FakeProvider())
+    engine.explain("limiting potential", 0, 5, 6)
+    engine.explain("limiting potential", 0, 5, 6, detailed=True)
+    assert engine.explained == [{"phrase": "limiting potential", "page": 0, "start": 5, "end": 6}]
+    assert engine.explained_spans(0) == engine.explained and engine.explained_spans(1) == []
+    assert make_engine(doc, tmp_path, FakeProvider()).explained_spans(0) == engine.explained

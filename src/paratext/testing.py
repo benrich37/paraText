@@ -79,6 +79,10 @@ class FakeProvider:
     def cache_key(self):
         return "fake"
 
+    @property
+    def summary(self):
+        return "fake model"
+
     def complete(self, system, prompt, json_schema=None):
         import json
         import re

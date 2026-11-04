@@ -132,7 +132,13 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-04 12:11 — Model and effort settings may reset on app relaunch
 
 - **Category:** bug
-- **Status:** open
+- **Status:** done (2026-11-04). Finding: `~/.config/paratext/config.toml` was last written on Nov 1 and holds
+  no model or effort for Claude Code, so nothing had been saved today (the dialog only writes on "Save and
+  use"; the app window that was open at the time predated the effort row). The dialog does show saved values
+  (new round-trip test). Fixed a latent way to lose them: windows share one Config object, the dialog starts
+  from the file on disk, and a window saving its own provider/audience change re-reads the file first, so a
+  second window or instance with an older copy cannot overwrite model/effort. The status bar now shows the
+  active model and effort (next entry), so a reset is visible at once.
 - Paper: Enhanced glycerol valorization via descriptor-guided dual-site engineering in Ni-doped MnO2 (page 4 of 13), `/Users/richb/Desktop/Patty-proj/1-s2.0-S0926337325011105-main.pdf`
 - AI: claude-cli:claude -p; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: It seems the researchers performed theoretical investigation on the 110 surface facet instead of the 310 surface facet. Is this choice explained in the paper?
@@ -146,7 +152,9 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-04 12:13 — Show AI model parameters beyond provider in main GUI
 
 - **Category:** ui
-- **Status:** open
+- **Status:** done (2026-11-04). The status bar's right side always reads e.g. "AI: claude-cli — claude:
+  model fable, effort low" (or "default model"); hovering it (and the AI drop-down) shows the full cache key.
+  The same line is written to `~/Library/Logs/paraText.log` at startup.
 - Paper: Enhanced glycerol valorization via descriptor-guided dual-site engineering in Ni-doped MnO2 (page 4 of 13), `/Users/richb/Desktop/Patty-proj/1-s2.0-S0926337325011105-main.pdf`
 - AI: claude-cli:claude -p; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: It seems the researchers performed theoretical investigation on the 110 surface facet instead of the 310 surface facet. Is this choice explained in the paper?
@@ -160,7 +168,13 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-04 12:21 — Log generated explanations and let users revisit them
 
 - **Category:** feature
-- **Status:** open
+- **Status:** done (2026-11-04). Whole-paper questions are tabulated in a "Questions asked" list in the side
+  panel (newest first; click to bring the answer back; they were already saved per paper). Selections that
+  were explained are recorded in the cache and drawn with a green double underline; hovering shows the saved
+  explanation, clicking brings it (and any "More depth" text) back without a new request, and re-selecting
+  the same words still shows it. When a click lands where a glossary term sits inside an explained selection,
+  the list temporarily becomes "Explanations at this spot" so you can switch between them; it returns to the
+  questions on the next selection or question.
 - Paper: Enhanced glycerol valorization via descriptor-guided dual-site engineering in Ni-doped MnO2 (page 2 of 13), `/Users/richb/Desktop/Patty-proj/1-s2.0-S0926337325011105-main.pdf`
 - AI: claude-cli:claude -p; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: electrodes

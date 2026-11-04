@@ -2,6 +2,22 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-04 (night): settings visibility and persistence, explanation history (issues 8-10)
+
+- The "settings reset" report could not be reproduced: the config file had not been written since Nov 1, so
+  the model/effort were never saved (the window in use predated the effort row, and the dialog writes only on
+  "Save and use"). Rather than guess, two things were done: the active model/effort are now always visible in
+  the status bar, and the one real way to lose settings was closed. Windows used to get a *reference* to the
+  main window's `Config`, which the main window then *replaced* after the setup dialog; a child window saving
+  an audience or provider change would have written the old providers back. Now the object is shared and
+  updated in place, the dialog edits a fresh load from disk, and `_save_config` merges onto the file.
+- Explanation history: explained selections are stored in the cache (`explained`) with word indices, which the
+  explanation dict (keyed by phrase) did not have; that is what makes a second underline possible. They are
+  drawn green (the unused "user" colour) with two lines, and appended after glossary spans so a glossary term
+  still wins the hover. `termClicked` now carries every span under the click; the side panel's history list
+  doubles as the chooser when there is more than one, as the tester suggested, and otherwise lists questions.
+  The earlier "Earlier questions" text appended to answers is gone in favour of the list.
+
 ## 2026-11-04 (evening): linked files in questions, descriptions, reciprocal links (issues 5-7)
 
 - Linked files are sent with whole-paper questions as `<linked_file>` blocks after the paper, not merged into

@@ -16,7 +16,11 @@ Open a PDF and paraText underlines the terms on each page that your chosen audie
   passage.
 - **Ask about the paper as a whole** in the box under the side panel ("does this paper show that X causes Y?").
   The question goes to the model with the full text of the paper, and the answer says where in the paper the
-  support is, or that there is none. Answers are kept per paper, and earlier questions are listed under the latest.
+  support is, or that there is none. Questions and answers are kept per paper and listed in the side panel;
+  click one to bring it back. Explained selections get a green double underline: hover or click to see the
+  saved explanation again. Where a term sits inside an explained selection, the list lets you switch between
+  the two.
+- The status bar always shows the active AI tool, model and effort.
 - **Link files**: "Link PDF…", "Link data…" and "Link folder…" attach supporting-information PDFs, data files
   or folders to the paper (the browser starts next to the PDF). Linked PDFs open in a second paraText window
   and link back to the paper; other files open with the system. When you link a file the model writes a short

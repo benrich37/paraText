@@ -98,13 +98,18 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   pixmap at the effective scale (view zoom × devicePixelRatio, capped at 4); misses are rendered by `_RenderJob`
   on a 1-thread `QThreadPool` and the item repaints when `_RenderSignals.done` arrives, drawing any older-scale
   pixmap meanwhile. Underlines/hover/selection are drawn in `paint` with cosmetic pens. `PageItem` does hover
-  hit-testing (`span_at`) and word selection (`doc.word_at`), and reports through the view's signals
-  (`termHovered`, `termClicked`, `selectionChanged`, `currentPageChanged`, `visiblePagesChanged`). The current page
+  hit-testing (`span_at`; `spans_at` for every span under a click) and word selection (`doc.word_at`), and
+  reports through the view's signals (`termHovered`, `termClicked` with the *list* of spans under the click,
+  `selectionChanged`, `currentPageChanged`, `visiblePagesChanged`). The current page
   is the one with the largest visible area; `go_to` overrides it so navigation works when all pages fit.
 - **`reader/app.ReaderWindow`** (QMainWindow): toolbar, the view, and a side panel (info bar for "no AI", title,
   body, footer, buttons). Engine callbacks run on worker threads; they call `EngineSignals.*.emit`, and Qt delivers
   the slots on the GUI thread. Term spans per page are recomputed lazily (`_ensure_spans`) when
-  `_glossary_version` changes. Visible pages plus the next one are requested as you scroll; "Explain whole paper"
+  `_glossary_version` changes (also bumped when a selection gets explained). The side panel's history list
+  shows the questions asked (`_show_history`) or, after a click that hits several spans, the choices
+  (`_show_span_choices`). The status bar's permanent label shows `provider.summary` (model, effort).
+  Config: all windows share one `Config`; `open_setup` loads the file fresh and `adopt_config` updates the
+  shared object in place; `_save_config` re-reads the file and writes only default provider/audience. Visible pages plus the next one are requested as you scroll; "Explain whole paper"
   queues every page. Hover explanations are `reader/popup.ExplanationPopup`, a frameless
   `ToolTip`-type window with explicit colours that stays open until another term is hovered, the viewport gets
   a click/wheel/key (event filter), Escape, or the window deactivates. `QToolTip` auto-hid after a second or so

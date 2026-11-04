@@ -257,11 +257,17 @@ def test_ask_about_whole_paper(window_factory):
     assert "may contain mistakes" in window.panel_footer.text()
     assert window.ask_edit.text() == ""
     assert "<page number=" in provider.calls[-1]["prompt"]
-    # a second question lists the first below its answer
+    # questions are tabulated in the history list (newest first); clicking one brings its answer back
     window.ask_edit.setText("What method is used?")
     window.ask_button.click()
-    assert "Earlier questions" in window.panel_body()
-    assert "Q: Does the paper measure anything experimentally?" in window.panel_body()
+    assert window.history_label.text().startswith("Questions asked")
+    assert [window.history_list.item(i).text() for i in range(2)] == [
+        "Q: What method is used?",
+        "Q: Does the paper measure anything experimentally?",
+    ]
+    window._history_clicked(window.history_list.item(1))
+    assert window.panel_title.text() == "Does the paper measure anything experimentally?"
+    assert window.panel_body().startswith("No: it only computes")
 
 
 def test_ask_disabled_without_ai(window_factory):
@@ -358,3 +364,91 @@ def test_linked_files_are_described_and_editable(window_factory, qtbot, tmp_path
     window.ask_edit.setText("Which facet?")
     window.ask_button.click()
     assert "<linked_files>" in provider.calls[-1]["prompt"] and "Only the XRD." in provider.calls[-1]["prompt"]
+
+
+def test_explained_selection_gets_second_underline_and_can_be_recalled(window_factory, qtbot):
+    provider = FakeProvider(explanation="Isolated metal atoms on a support.")
+    window = window_factory(provider)
+    words = [w.text for w in window.doc.words(0)]
+    start = words.index("single-atom")
+    p0, p1 = word_point(window, 0, start, -1), word_point(window, 0, start + 1, +1)
+    QTest.mousePress(window.view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p0)
+    QTest.mouseMove(window.view.viewport(), p1)
+    QTest.mouseRelease(window.view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p1)
+    window.explain_selection()
+    assert window.panel_body() == "Isolated metal atoms on a support."
+    explained = [t for t in window.view.page_item(0).spans if t.kind == "explained"]
+    assert len(explained) == 1 and (explained[0].span.start, explained[0].span.end) == (start, start + 1)
+    record = {"phrase": window.subject.phrase, "page": 0, "start": start, "end": start + 1}
+    assert window.engine.explained == [record]
+    # it survives a restart of the engine (cache file) and comes back with a click, without a new request
+    calls = len(provider.calls)
+    window._make_engine()
+    window._ensure_spans(0)
+    span = next(t for t in window.view.page_item(0).spans if t.kind == "explained")
+    window.set_panel("x", "")
+    window.show_term(0, [span])
+    assert (
+        window.panel_body() == "Isolated metal atoms on a support." and "your selection" in window.panel_footer.text()
+    )
+    assert len(provider.calls) == calls and window.depth_button.isEnabled()
+    # hovering it shows the popup too
+    QTest.mouseMove(window.view.viewport(), word_point(window, 0, start, 0))
+    qtbot.waitUntil(lambda: window.popup.isVisible())
+    assert "Isolated metal atoms" in window.popup.text()
+
+
+def test_overlapping_explanations_offer_a_choice(window_factory):
+    provider = FakeProvider(explanation="The whole clause, explained.")
+    window = window_factory(provider)
+    term, _ = term_point(window, 0, "limiting potential")
+    start, end = term.span.start - 1, term.span.end + 1  # a selection that contains the glossary term
+    window.view.page_item(0).selection = (start, end)
+    window._on_selection(0, start, end)
+    window.explain_selection()
+    # clicking inside the term now hits both the term and the explained selection
+    _, point = term_point(window, 0, "limiting potential")
+    QTest.mouseClick(window.view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, point)
+    assert window.history_label.text().startswith("Explanations at this spot")
+    labels = [window.history_list.item(i).text() for i in range(window.history_list.count())]
+    assert labels[0] == "Term: limiting potential" and labels[1].startswith("Your selection: ")
+    assert window.panel_body().startswith(SAMPLE_GLOSSARY["limiting potential"])
+    window._history_clicked(window.history_list.item(1))
+    assert window.panel_body() == "The whole clause, explained."
+    # a plain selection elsewhere restores the question list
+    window._on_selection(0, 0, 0)
+    assert window.history_label.text().startswith("Questions asked")
+
+
+def test_status_bar_shows_model_parameters(window_factory):
+    window = window_factory(FakeProvider())
+    assert window.ai_label.text() == "AI: fake — fake model"
+    assert "fake" in window.ai_label.toolTip()
+    window.set_provider("none")
+    assert window.ai_label.text() == "AI: none"
+
+
+def test_windows_share_config_and_never_write_stale_settings(window_factory, qtbot):
+    """A second window (or the setup dialog) must not lose model/effort saved by another."""
+    window = window_factory(FakeProvider())
+    config = window.config
+    config.providers["claude-cli"] = {"preset": "claude-cli", "command": ["claude", "-p"]}
+    config.save()
+    child = window.open_in_new_window(window.doc.path)
+    qtbot.addWidget(child)
+    assert child.config is config
+    # the dialog saved a model and an effort (simulated): the main window adopts them in place
+    saved = Config.load(config.path)
+    saved.providers["claude-cli"].update(model="fable", effort="low")
+    saved.default_provider = "claude-cli"
+    saved.save()
+    window.adopt_config(saved)
+    assert child.config.providers["claude-cli"]["model"] == "fable"
+    # another window holding an older copy writes only its own change
+    stale = Config.load(config.path)
+    stale.providers["claude-cli"] = {"preset": "claude-cli", "command": ["claude", "-p"]}
+    child.config = stale
+    child.set_audience("a chemist")
+    on_disk = Config.load(config.path)
+    assert on_disk.audience == "a chemist" and on_disk.providers["claude-cli"]["effort"] == "low"
+    assert child.config.providers["claude-cli"]["model"] == "fable"

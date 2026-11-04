@@ -35,7 +35,8 @@ Ordered by priority. Update this file when you finish or discover something. Sta
 
 4. Trim the underline to the term's characters. PyMuPDF word boxes include attached punctuation ("(DFT)",
    "potential."); use `get_text("rawdict")` character boxes.
-5. Remember the last page per document (continuous scrolling is done).
+5. Remember the last page per document (continuous scrolling is done). Also: an "Explanations" tab in the
+   history list that lists every explained selection of the paper, not only those visible under a click.
 6. Progress display for "Explain whole paper" (today: a status-bar count); mind rate limits (2 workers).
 7. For Anthropic, consider sending the whole PDF as a `document` block once and asking for a glossary of the whole
    paper. That would handle figures and equations and save repeated context. With per-page calls, use prompt caching

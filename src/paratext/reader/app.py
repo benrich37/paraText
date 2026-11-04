@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 from paratext.ai.providers import ProviderError
 from paratext.config import Config
 from paratext.engine import ContextEngine
+from paratext.glossary import Span
 from paratext.issues import IssueContext, issues_path, log_issue
 from paratext.links import Link, LinkStore
 from paratext.pdf import PdfDocument
@@ -250,6 +251,15 @@ class ReaderWindow(QMainWindow):
         buttons.addStretch(1)
         layout.addLayout(buttons)
 
+        self.history_label = QLabel("Questions asked about this paper:")
+        self.history_label.setStyleSheet("margin-top: 6px;")
+        layout.addWidget(self.history_label)
+        self.history_list = QListWidget()
+        self.history_list.setMaximumHeight(96)
+        self.history_list.setToolTip("Click to bring an earlier answer or explanation back")
+        self.history_list.itemClicked.connect(self._history_clicked)
+        layout.addWidget(self.history_list)
+
         links_label = QLabel("Linked files (supporting information, data):")
         links_label.setStyleSheet("margin-top: 6px;")
         layout.addWidget(links_label)
@@ -313,6 +323,9 @@ class ReaderWindow(QMainWindow):
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([850, 350])
         self.setCentralWidget(splitter)
+        self.ai_label = QLabel()
+        self.ai_label.setStyleSheet("color: #495057; margin-right: 6px;")
+        self.statusBar().addPermanentWidget(self.ai_label)
         self.statusBar().showMessage("Open a PDF to start (Ctrl/⌘-O).")
         self.set_panel(
             "paraText",
@@ -353,10 +366,12 @@ class ReaderWindow(QMainWindow):
         self.view.fit_width()  # the view re-fits on resize until the user zooms manually
         self._on_page_changed(0)
         self._refresh_links()
+        self._show_history()
 
     def close_document(self) -> None:
         self.popup.hide()
         self.links_list.clear()
+        self.history_list.clear()
         if self.engine:
             self.engine.shutdown()
             self.engine = None
@@ -401,6 +416,7 @@ class ReaderWindow(QMainWindow):
 
     def _update_provider_ui(self, provider_error: Exception | None = None) -> None:
         has_ai = bool(self.engine and self.engine.provider)
+        self._show_ai_settings(provider_error)
         if provider_error:
             self.info_label.setText(f"AI provider problem: {provider_error}")
             self.info_bar.show()
@@ -414,6 +430,25 @@ class ReaderWindow(QMainWindow):
         else:
             self.info_bar.hide()
         self._update_buttons()
+
+    def _show_ai_settings(self, provider_error: Exception | None = None) -> None:
+        """The status bar always names the active tool, model and effort, not just the provider."""
+        provider = self.engine.provider if self.engine else None
+        if provider is None and self.provider_name != "none" and self.doc is None:
+            try:  # no document yet: show what the configured provider would be
+                provider = self.config.make_provider(self.provider_name)
+            except ProviderError as e:
+                provider_error = provider_error or e
+        if provider_error:
+            text, tip = f"AI: {self.provider_name} (problem)", str(provider_error)
+        elif provider is None:
+            text, tip = "AI: none", "No AI provider selected"
+        else:
+            text, tip = f"AI: {provider.name} — {provider.summary}", f"Cache key: {provider.cache_key}"
+            log.info("provider %s: %s", provider.name, provider.summary)
+        self.ai_label.setText(text)
+        self.ai_label.setToolTip(tip)
+        self.provider_box.setToolTip(tip)
 
     def _provider_box_changed(self, name: str) -> None:
         if name and name != self.provider_name:
@@ -443,19 +478,40 @@ class ReaderWindow(QMainWindow):
                 self._make_engine()
 
     def _save_config(self) -> None:
+        """Write this window's default provider and audience on top of what is on disk.
+
+        Provider settings (model, effort, keys) are only edited by the setup dialog; re-reading the file first
+        means a second window or instance holding an older copy cannot overwrite them.
+        """
         try:
-            self.config.save()
+            fresh = Config.load(self.config.path)
+            fresh.default_provider = self.config.default_provider
+            fresh.audience = self.config.audience
+            fresh.cache_dir = self.config.cache_dir
+            fresh.save(self.config.path)
+            self.config.providers = fresh.providers
+            self.config.path = fresh.path
         except OSError as e:
             self.statusBar().showMessage(f"Could not save settings: {e}")
 
+    def adopt_config(self, config: Config) -> None:
+        """Take over settings saved by the setup dialog, updating the Config object shared with other windows."""
+        self.config.default_provider = config.default_provider
+        self.config.audience = config.audience
+        self.config.providers = config.providers
+        self.config.cache_dir = config.cache_dir
+        self.config.path = config.path or self.config.path
+        self.audience = self.config.audience
+        self.audience_edit.setText(self.audience)
+        self.audience_edit.setCursorPosition(0)
+        self._fill_provider_box()
+
     def open_setup(self) -> None:
-        dialog = SetupDialog(self.config, current=self.provider_name, parent=self)
+        # start from the file, not this window's copy, so settings saved elsewhere are shown and kept
+        current = Config.load(self.config.path) if self.config.path and self.config.path.exists() else self.config
+        dialog = SetupDialog(current, current=self.provider_name, parent=self)
         if dialog.exec():
-            self.config = dialog.config
-            self.audience = self.config.audience
-            self.audience_edit.setText(self.audience)
-            self.audience_edit.setCursorPosition(0)
-            self._fill_provider_box()
+            self.adopt_config(dialog.config)
             self.set_provider(dialog.selected_name)
 
     def open_profile(self) -> None:
@@ -568,6 +624,9 @@ class ReaderWindow(QMainWindow):
             entry = self.engine.entry(span.key)
             color = UNDERLINE_COLORS.get(entry.source if entry else "ai", UNDERLINE_COLORS["ai"])
             terms.append(TermSpan(span, line_rects(words, span.start, span.end), color))
+        for e in self.engine.explained_spans(page):  # selections already explained: double underline, click to recall
+            span = Span(self.engine.explanation_key(e["phrase"], page, False), e["start"], e["end"])
+            terms.append(TermSpan(span, line_rects(words, e["start"], e["end"]), UNDERLINE_COLORS["user"], "explained"))
         item.spans = terms
         item.spans_version = self._glossary_version
         item.update()
@@ -592,13 +651,20 @@ class ReaderWindow(QMainWindow):
         # Leaving a term keeps the popup open (it closes on click, scroll, Escape or another term).
         if term is None or not self.engine:
             return
-        entry = self.engine.entry(term.span.key)
-        if entry is None:
-            return
+        if term.kind == "explained":
+            e = self._explained_record(page, term)
+            explanation = self.engine.explanations.get(term.span.key, "") if e else ""
+            if not e or not explanation:
+                return
+            title, body, footer = e["phrase"], explanation, self._footer("ai") + " (your selection)"
+        else:
+            entry = self.engine.entry(term.span.key)
+            if entry is None:
+                return
+            title, body, footer = entry.term, entry.explanation, self._footer(entry.source, entry)
         text = (
-            f"<b>{html.escape(entry.term)}</b><br>{html.escape(entry.explanation)}"
-            f"<br><span style='color:#5c5f66'><i>{html.escape(self._footer(entry.source, entry))}"
-            " · click for more</i></span>"
+            f"<b>{html.escape(title)}</b><br>{html.escape(body)}"
+            f"<br><span style='color:#5c5f66'><i>{html.escape(footer)} · click for more</i></span>"
         )
         rect = self.view.term_viewport_rect(page, term)
         top_left = self.view.viewport().mapToGlobal(rect.topLeft())
@@ -665,9 +731,43 @@ class ReaderWindow(QMainWindow):
         self.ask_edit.setEnabled(has_ai)
         self.ask_button.setEnabled(has_ai)
 
-    def show_term(self, page: int, term: TermSpan) -> None:
+    def show_term(self, page: int, terms) -> None:
+        """Show the clicked span(s); with several (a term inside an explained selection) list them to switch."""
+        terms = list(terms) if isinstance(terms, (list, tuple)) else [terms]
         self.popup.hide()
         self.view.clear_selection()
+        if len(terms) > 1:
+            self._show_span_choices(page, terms)
+        else:
+            self._show_history()
+        self._show_span(page, terms[0])
+
+    def _explained_record(self, page: int, term: TermSpan) -> dict | None:
+        return next(
+            (
+                e
+                for e in self.engine.explained_spans(page)
+                if (e["start"], e["end"]) == (term.span.start, term.span.end)
+            ),
+            None,
+        )
+
+    def _show_span(self, page: int, term: TermSpan) -> None:
+        if term.kind == "explained":
+            e = self._explained_record(page, term)
+            phrase = (
+                e["phrase"]
+                if e
+                else " ".join(w.text for w in self.doc.words(page)[term.span.start : term.span.end + 1])
+            )
+            self.subject = Subject(phrase, page, term.span.start, term.span.end)
+            body = self.engine.cached_explanation(phrase, page, False) or ""
+            detailed = self.engine.cached_explanation(phrase, page, True)
+            if detailed:
+                body += "\n\n" + detailed
+            self.set_panel(phrase, body, self._footer("ai") + " (your selection)")
+            self._update_buttons()
+            return
         entry = self.engine.entry(term.span.key) if self.engine else None
         phrase = " ".join(w.text for w in self.doc.words(page)[term.span.start : term.span.end + 1])
         self.subject = Subject(entry.term if entry else phrase, page, term.span.start, term.span.end, term.span.key)
@@ -678,6 +778,54 @@ class ReaderWindow(QMainWindow):
         self.set_panel(self.subject.phrase, body, self._footer(entry.source if entry else "ai", entry))
         self._update_buttons()
 
+    # ------------------------------------------------------------------
+    # history: questions asked, and explanations stacked under one click
+    # ------------------------------------------------------------------
+
+    def _show_history(self) -> None:
+        """List the questions asked about this paper (newest first) in the history box."""
+        self.history_label.setText("Questions asked about this paper:")
+        self.history_list.clear()
+        if not self.engine:
+            return
+        for q in reversed(self.engine.questions):
+            item = QListWidgetItem(f"Q: {q['question']}")
+            item.setToolTip(q["answer"])
+            item.setData(Qt.ItemDataRole.UserRole, ("question", q))
+            self.history_list.addItem(item)
+
+    def _show_span_choices(self, page: int, terms) -> None:
+        """Several explanations under one click: list them so the reader can switch between them."""
+        self.history_label.setText("Explanations at this spot (click to switch):")
+        self.history_list.clear()
+        words = self.doc.words(page)
+        for term in terms:
+            if term.kind == "explained":
+                e = self._explained_record(page, term)
+                label = "Your selection: " + (e["phrase"] if e else "")
+            else:
+                entry = self.engine.entry(term.span.key)
+                label = (
+                    ("Term: " + entry.term)
+                    if entry
+                    else " ".join(w.text for w in words[term.span.start : term.span.end + 1])
+                )
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, ("span", (page, term)))
+            self.history_list.addItem(item)
+        self.history_list.setCurrentRow(0)
+
+    def _history_clicked(self, item) -> None:
+        kind, payload = item.data(Qt.ItemDataRole.UserRole)
+        if kind == "question":
+            self.subject = None
+            self.view.clear_selection()
+            self.set_panel(payload["question"], payload["answer"], self._footer("ai"))
+            self._update_buttons()
+        elif kind == "span":
+            page, term = payload
+            self._show_span(page, term)
+
     def selected_text(self) -> str:
         sel = self.view.selection()
         if sel is None or not self.doc:
@@ -686,6 +834,7 @@ class ReaderWindow(QMainWindow):
         return " ".join(w.text for w in self.doc.words(page)[start : end + 1])
 
     def _on_selection(self, page: int, start: int, end: int) -> None:
+        self._show_history()
         self.subject = Subject(self.selected_text(), page, start, end)
         cached = self.engine.cached_explanation(self.subject.phrase, page, False) if self.engine else None
         self.set_panel(self.subject.phrase, cached or "Press “Explain selection” to explain this in context.")
@@ -728,6 +877,9 @@ class ReaderWindow(QMainWindow):
             entry = self.engine.entry(subject.term_key)
             text = (entry.explanation + "\n\n" + text) if entry else text
         self.set_panel(phrase, text, self._footer("ai"))
+        if not subject.term_key:  # a selection: it now carries a double underline that brings this back
+            self._glossary_version += 1
+            self._refresh_visible()
 
     # ------------------------------------------------------------------
     # linked files: SI PDFs, data files, folders
@@ -869,16 +1021,8 @@ class ReaderWindow(QMainWindow):
             self.set_panel(question, f"Could not get an answer: {error}")
             return
         self.ask_edit.clear()
-        self.set_panel(question, answer + self._earlier_questions(question), self._footer("ai"))
-
-    def _earlier_questions(self, current: str, limit: int = 5) -> str:
-        """Previous Q&A for this paper (newest first), appended below the current answer."""
-        key = self.engine.question_key(current)
-        earlier = [q for q in reversed(self.engine.questions) if self.engine.question_key(q["question"]) != key]
-        if not earlier:
-            return ""
-        blocks = [f"Q: {q['question']}\nA: {q['answer']}" for q in earlier[:limit]]
-        return "\n\n— Earlier questions —\n\n" + "\n\n".join(blocks)
+        self.set_panel(question, answer, self._footer("ai"))
+        self._show_history()
 
     # ------------------------------------------------------------------
     # issue log for testing sessions
