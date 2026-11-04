@@ -5,7 +5,7 @@ import os
 import pytest
 from PySide6.QtCore import QThreadPool
 
-from paratext.ai.providers import PRESETS
+from paratext.ai.providers import PRESETS, make_provider
 from paratext.config import Config
 from paratext.reader.setup import SetupDialog
 from paratext.testing import FakeProvider
@@ -38,10 +38,10 @@ def test_command_preset_status(dialog_factory, monkeypatch):
     assert not dialog.command_edit.isHidden()
     assert dialog.key_row.isHidden()
     assert dialog.command_edit.text() == "claude -p"
-    # subscription CLIs take a model (blank = the tool's default) but no effort
-    assert not dialog.model_row.isHidden() and dialog.effort_combo.isHidden()
-    assert dialog.fetch_button.isHidden()
-    assert dialog.model_combo.currentText() == "" and "--model" in dialog.model_note.text()
+    # Claude Code takes a model (blank = the tool's default), an effort level and a model check
+    assert not dialog.model_row.isHidden() and not dialog.effort_combo.isHidden()
+    assert not dialog.fetch_button.isHidden() and dialog.fetch_button.text() == "Check models"
+    assert dialog.model_combo.currentText() == "" and "alias" in dialog.model_note.text()
     monkeypatch.setattr("shutil.which", lambda cmd: "/bin/" + cmd)
     dialog.command_edit.setText("claude -p --verbose")
     assert dialog.status_label.text().startswith("✓")
@@ -156,3 +156,33 @@ def test_initial_selection_prefers_a_ready_option(dialog_factory, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     dialog = dialog_factory()
     assert dialog.selected_name == "gemini-cli"
+
+
+def test_claude_cli_effort_and_model_check(dialog_factory, qtbot, monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/local/bin/{cmd}")
+    monkeypatch.setattr(
+        "paratext.reader.setup.probe_claude_models",
+        lambda command: {"fable": "claude-fable-5-1", "opus": "claude-opus-5-5"},
+    )
+    dialog = dialog_factory(current="claude-cli")
+    assert not dialog.effort_combo.isHidden() and dialog.effort_combo.currentText() == ""
+    assert not dialog.fetch_button.isHidden() and dialog.fetch_button.text() == "Check models"
+    assert [dialog.model_combo.itemText(i) for i in range(4)] == ["", "fable", "opus", "sonnet"]
+    dialog.fetch_models()
+    qtbot.waitUntil(lambda: "Usable now" in dialog.result_label.text(), timeout=5000)
+    assert "fable = claude-fable-5-1" in dialog.result_label.text()
+    items = [dialog.model_combo.itemText(i) for i in range(dialog.model_combo.count())]
+    assert items == ["", "fable", "opus", "claude-fable-5-1", "claude-opus-5-5"]
+    dialog.model_combo.setCurrentText("fable")
+    dialog.effort_combo.setCurrentText("low")
+    settings = dialog.current_settings()
+    assert settings["model"] == "fable" and settings["effort"] == "low"
+    assert make_provider("claude-cli", settings).full_command() == [
+        "claude",
+        "-p",
+        "--model",
+        "fable",
+        "--effort",
+        "low",
+    ]
+    QThreadPool.globalInstance().waitForDone()

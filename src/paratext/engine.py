@@ -17,7 +17,15 @@ from pathlib import Path
 
 from paratext.ai import prompts
 from paratext.ai.providers import Provider, ProviderError
-from paratext.glossary import GlossaryEntry, Span, extract_acronyms, find_spans, normalize_term, parse_terms
+from paratext.glossary import (
+    GlossaryEntry,
+    Span,
+    extract_acronyms,
+    find_spans,
+    normalize_term,
+    parse_corrections,
+    parse_terms,
+)
 from paratext.pdf import PdfDocument
 from paratext.profile import UserProfile
 
@@ -84,7 +92,8 @@ class ContextEngine:
             return
         if data.get("version") != CACHE_VERSION:
             return
-        self.terms = {k: GlossaryEntry(**v) for k, v in data.get("terms", {}).items()}
+        # keyed by normalize_term(term): re-key on load so files written under an older rule still work
+        self.terms = {normalize_term(e.term): e for e in (GlossaryEntry(**v) for v in data.get("terms", {}).values())}
         self.processed_pages = set(data.get("processed_pages", []))
         self.explanations = dict(data.get("explanations", {}))
         self.questions = [q for q in data.get("questions", []) if "question" in q and "answer" in q]
@@ -156,7 +165,7 @@ class ContextEngine:
         )
         reply = self.provider.complete(self.system_prompt(), prompt, prompts.GLOSSARY_SCHEMA)
         try:
-            entries = parse_terms(reply, page)
+            entries = parse_terms(reply, page, self.provider.cache_key)
         except ValueError as e:
             raise ProviderError(f"Could not read the model's glossary reply: {e}") from e
         self.add_entries(entries)
@@ -179,6 +188,64 @@ class ContextEngine:
             return None
         self._pending.add(key)
         future = self.executor.submit(self.page_job, page)
+        future.add_done_callback(lambda f: self._finish(key, f, callback, page))
+        return future
+
+    # ------------------------------------------------------------------
+    # proofreading existing entries with the current provider
+    # ------------------------------------------------------------------
+
+    def page_entries(self, page: int) -> list[GlossaryEntry]:
+        """AI entries that occur on ``page`` (by span), whichever page first produced them."""
+        with self._lock:
+            terms = dict(self.terms)
+        keys = {s.key for s in self.spans(page)}
+        return [e for k, e in terms.items() if k in keys and e.source != "acronym"]
+
+    def proofread_job(self, page: int) -> dict:
+        """Re-check the AI entries on one page against its text (blocking). Returns counts of fixed/removed."""
+        if self.provider is None:
+            raise ProviderError("No AI provider configured.")
+        entries = self.page_entries(page)
+        counts = {"checked": len(entries), "fixed": 0, "removed": 0}
+        if not entries:
+            return counts
+        prompt = prompts.proofread_prompt(
+            self.doc.paper_context(),
+            page + 1,
+            self.doc.page_text(page),
+            [(e.term, e.explanation) for e in entries],
+            self.audience,
+        )
+        reply = self.provider.complete(self.system_prompt(), prompt, prompts.PROOFREAD_SCHEMA)
+        try:
+            corrections = parse_corrections(reply)
+        except ValueError as e:
+            raise ProviderError(f"Could not read the model's proofreading reply: {e}") from e
+        with self._lock:
+            for term, action, explanation in corrections:
+                key = normalize_term(term)
+                entry = self.terms.get(key)
+                if entry is None or entry.source == "acronym":
+                    continue
+                if action == "remove":
+                    del self.terms[key]
+                    counts["removed"] += 1
+                    continue
+                if action == "fix":
+                    entry.explanation = explanation
+                    counts["fixed"] += 1
+                entry.proofread = self.provider.cache_key
+        self.save()
+        return counts
+
+    def proofread(self, page: int, callback: Callable | None = None) -> Future | None:
+        """Proofread ``page`` in the background; ``callback(page, counts, error)`` when done."""
+        key = ("proofread", page)
+        if self.provider is None or key in self._pending:
+            return None
+        self._pending.add(key)
+        future = self.executor.submit(self.proofread_job, page)
         future.add_done_callback(lambda f: self._finish(key, f, callback, page))
         return future
 

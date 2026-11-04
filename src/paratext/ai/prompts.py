@@ -66,6 +66,55 @@ def glossary_prompt(
     )
 
 
+PROOFREAD_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "corrections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "term": {"type": "string"},
+                    "action": {"type": "string", "enum": ["keep", "fix", "remove"]},
+                    "explanation": {"type": "string", "description": "the corrected explanation when action is fix"},
+                },
+                "required": ["term", "action", "explanation"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["corrections"],
+    "additionalProperties": False,
+}
+
+
+def proofread_prompt(
+    paper_context: str, page_number: int, page_text: str, entries: list[tuple[str, str]], audience: str
+) -> str:
+    """Re-check existing glossary entries for one page against the page text."""
+    listed = "\n".join(f"- {term}: {explanation}" for term, explanation in entries)
+    return (
+        "<paper_context>\n"
+        f"{paper_context}\n"
+        "</paper_context>\n\n"
+        f'<page number="{page_number}">\n'
+        f"{page_text}\n"
+        "</page>\n\n"
+        "These glossary entries were generated earlier for terms on this page:\n"
+        "<entries>\n"
+        f"{listed}\n"
+        "</entries>\n\n"
+        f"Proofread them for {audience}. Check each entry against the page: is the term read in the sense the "
+        "paper uses it (for example, a two-letter token may be a chemical element rather than an abbreviation), "
+        "is the explanation correct, and is it pitched at this audience? "
+        'For each entry return one object with the same "term" string and an "action": "keep" when it is right, '
+        '"fix" with a corrected "explanation" (1 to 3 sentences), or "remove" when the term is not something '
+        "this audience needs or the entry cannot be fixed. "
+        'Return only a JSON object of the form {"corrections": [{"term": "...", "action": "...", '
+        '"explanation": "..."}]}.'
+    )
+
+
 def explain_prompt(
     paper_context: str, phrase: str, passage: str, page_number: int, audience: str, detailed: bool
 ) -> str:

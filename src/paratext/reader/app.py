@@ -15,7 +15,7 @@ import html
 import logging
 import os
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRunnable, Qt, QThreadPool, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -31,7 +31,6 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTextBrowser,
     QToolBar,
-    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -43,6 +42,7 @@ from paratext.issues import IssueContext, issues_path, log_issue
 from paratext.pdf import PdfDocument
 from paratext.profile import UserProfile
 from paratext.reader.pageview import UNDERLINE_COLORS, DocumentView, TermSpan, line_rects
+from paratext.reader.popup import ExplanationPopup
 from paratext.reader.profile_dialog import ProfileDialog
 from paratext.reader.setup import SetupDialog
 
@@ -61,6 +61,7 @@ class Subject:
 
 class EngineSignals(QObject):
     page_done = Signal(int, object, object)  # page, entries, error
+    proofread_done = Signal(int, object, object)  # page, counts, error
     explained = Signal(str, object, object)  # phrase, text, error
     answered = Signal(str, object, object)  # question, answer, error
     issue_logged = Signal(object, object)  # (path, ai_problem), error
@@ -101,6 +102,7 @@ class ReaderWindow(QMainWindow):
         self._glossary_version = 0
         self._signals = EngineSignals()
         self._signals.page_done.connect(self._on_page_done)
+        self._signals.proofread_done.connect(self._on_proofread_done)
         self._signals.explained.connect(self._on_explained)
         self._signals.answered.connect(self._on_answered)
         self._signals.issue_logged.connect(self._on_issue_logged)
@@ -109,7 +111,9 @@ class ReaderWindow(QMainWindow):
         self.setWindowTitle("paraText reader")
         self.resize(1200, 850)
         QApplication.instance().setStyleSheet(TOOLTIP_STYLE)
+        self.popup = ExplanationPopup()
         self._build_ui()
+        self.view.viewport().installEventFilter(self)  # clicks, scrolling and keys dismiss the popup
         self._update_provider_ui()
         if pdf_path:
             self.open_pdf(pdf_path)
@@ -162,6 +166,12 @@ class ReaderWindow(QMainWindow):
         self.analyze_action.setToolTip("Find and explain terms on every page now, instead of as you read")
         self.analyze_action.triggered.connect(self.analyze_all)
         bar.addAction(self.analyze_action)
+        self.proofread_action = QAction("Proofread", self)
+        self.proofread_action.setToolTip(
+            "Have the current AI model re-read each explained page and fix or drop wrong explanations"
+        )
+        self.proofread_action.triggered.connect(self.proofread_all)
+        bar.addAction(self.proofread_action)
 
         spacer = QWidget()
         spacer.setSizePolicy(spacer.sizePolicy().horizontalPolicy().Expanding, spacer.sizePolicy().verticalPolicy())
@@ -300,6 +310,7 @@ class ReaderWindow(QMainWindow):
         self._on_page_changed(0)
 
     def close_document(self) -> None:
+        self.popup.hide()
         if self.engine:
             self.engine.shutdown()
             self.engine = None
@@ -459,6 +470,47 @@ class ReaderWindow(QMainWindow):
             self.engine.ensure_page(page, callback=self._signals.page_done.emit)
         self.statusBar().showMessage(f"Explaining {len(todo)} pages in the background…")
 
+    def proofread_all(self) -> None:
+        """Re-check every explained page's AI entries with the current provider."""
+        if not self.engine or not self.engine.provider:
+            self.statusBar().showMessage("Set up an AI provider first.")
+            return
+        pages = sorted(self.engine.processed_pages)
+        if not pages:
+            self.statusBar().showMessage("Nothing to proofread yet: no page has been explained.")
+            return
+        self._proofread_left = len(pages)
+        self._proofread_counts = {"checked": 0, "fixed": 0, "removed": 0}
+        self.statusBar().showMessage(
+            f"Proofreading {len(pages)} explained pages with {self.engine.provider.cache_key}…"
+        )
+        for page in pages:  # callbacks may run synchronously (ImmediateExecutor), so the message is set first
+            self.engine.proofread(page, callback=self._signals.proofread_done.emit)
+
+    _proofread_left = 0
+    _proofread_counts: dict = {}
+
+    def _on_proofread_done(self, page: int, counts, error) -> None:
+        self._proofread_left = max(0, self._proofread_left - 1)
+        if error:
+            self.statusBar().showMessage(f"Proofreading page {page + 1} failed: {error}")
+        else:
+            for k, v in counts.items():
+                self._proofread_counts[k] = self._proofread_counts.get(k, 0) + v
+            if counts["fixed"] or counts["removed"]:
+                self._glossary_version += 1
+                self._refresh_visible()
+                if self.subject and self.subject.term_key:
+                    entry = self.engine.entry(self.subject.term_key)
+                    if entry is not None:
+                        self.set_panel(entry.term, entry.explanation, self._footer(entry.source, entry))
+        if self._proofread_left == 0:
+            c = self._proofread_counts
+            self.statusBar().showMessage(
+                f"Proofread {c.get('checked', 0)} explanations: {c.get('fixed', 0)} corrected, "
+                f"{c.get('removed', 0)} removed."
+            )
+
     def _ensure_spans(self, page: int) -> None:
         item = self.view.page_item(page)
         if item.spans_version == self._glossary_version:
@@ -490,24 +542,52 @@ class ReaderWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_hover(self, page: int, term: TermSpan | None, screen_pos: QPoint) -> None:
+        # Leaving a term keeps the popup open (it closes on click, scroll, Escape or another term).
         if term is None or not self.engine:
-            QToolTip.hideText()
             return
         entry = self.engine.entry(term.span.key)
         if entry is None:
             return
         text = (
             f"<b>{html.escape(entry.term)}</b><br>{html.escape(entry.explanation)}"
-            f"<br><span style='color:#5c5f66'><i>{html.escape(self._footer(entry.source))} · click for more</i></span>"
+            f"<br><span style='color:#5c5f66'><i>{html.escape(self._footer(entry.source, entry))}"
+            " · click for more</i></span>"
         )
         rect = self.view.term_viewport_rect(page, term)
-        QToolTip.showText(screen_pos, text, self.view.viewport(), rect)
+        top_left = self.view.viewport().mapToGlobal(rect.topLeft())
+        self.popup.show_for(text, QRect(top_left, rect.size()))
 
-    def _footer(self, source: str) -> str:
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802  (Qt override)
+        if obj is self.view.viewport() and event.type() in (
+            QEvent.Type.MouseButtonPress,
+            QEvent.Type.Wheel,
+            QEvent.Type.KeyPress,
+        ):
+            self.popup.hide()
+        return super().eventFilter(obj, event)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Escape and self.popup.isVisible():
+            self.popup.hide()
+            return
+        super().keyPressEvent(event)
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.ActivationChange and not self.isActiveWindow():
+            self.popup.hide()
+        super().changeEvent(event)
+
+    def _footer(self, source: str, entry=None) -> str:
+        """Who produced an explanation: the provider's cache key names the tool, model and effort."""
         if source == "acronym":
             return "Defined in the paper"
-        name = self.engine.provider.name if self.engine and self.engine.provider else "AI"
-        return f"AI-generated by {name}; may contain mistakes"
+        provider = (entry.provider if entry else "") or (
+            self.engine.provider.cache_key if self.engine and self.engine.provider else "AI"
+        )
+        text = f"AI-generated by {provider}; may contain mistakes"
+        if entry is not None and entry.proofread:
+            text += f" · proofread by {entry.proofread}"
+        return text
 
     # ------------------------------------------------------------------
     # side panel
@@ -527,11 +607,12 @@ class ReaderWindow(QMainWindow):
         self.explain_button.setEnabled(has_ai and self.view.selection() is not None)
         self.depth_button.setEnabled(has_ai and self.subject is not None)
         self.analyze_action.setEnabled(has_ai)
+        self.proofread_action.setEnabled(has_ai)
         self.ask_edit.setEnabled(has_ai)
         self.ask_button.setEnabled(has_ai)
 
     def show_term(self, page: int, term: TermSpan) -> None:
-        QToolTip.hideText()
+        self.popup.hide()
         self.view.clear_selection()
         entry = self.engine.entry(term.span.key) if self.engine else None
         phrase = " ".join(w.text for w in self.doc.words(page)[term.span.start : term.span.end + 1])
@@ -540,7 +621,7 @@ class ReaderWindow(QMainWindow):
         detailed = self.engine.cached_explanation(self.subject.phrase, page, True) if self.engine else None
         if detailed:
             body += "\n\n" + detailed
-        self.set_panel(self.subject.phrase, body, self._footer(entry.source if entry else "ai"))
+        self.set_panel(self.subject.phrase, body, self._footer(entry.source if entry else "ai", entry))
         self._update_buttons()
 
     def selected_text(self) -> str:

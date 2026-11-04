@@ -2,6 +2,27 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-04 (later): first three reported issues
+
+- **Claude Code model/effort/Fable.** Checked live: `claude -p --model fable --effort low --output-format json`
+  works on Claude Code 2.1.318 and `modelUsage` names the resolved id (`fable` → `claude-fable-5-1`, `opus` →
+  `claude-opus-5-5`; a `claude-haiku-5-5` entry also appears, presumably a helper task, so the probe picks the id
+  that contains the alias). There is no model-listing command, so "Check models" is a probe: four one-word
+  prompts. `CommandProvider` gained `effort`/`effort_args` mirroring `model`/`model_args`; the full command is
+  the cache key, so model and effort changes start a fresh cache as before.
+- **Hover popup.** `QToolTip` was dropped for a custom window rather than fought with: its hiding rules (timeout
+  by text length, hide on leaving the rect, hide on any mouse move for a tooltip without a rect) are not
+  configurable enough for "stay until dismissed". The popup is dismissed by a click/wheel/key in the viewport
+  (event filter), Escape, another term, or deactivation; leaving the term keeps it.
+- **"Fe" vs "FE".** Diagnosed as a matching bug first: keys were lowercased, so "FE" (Faradaic efficiency,
+  found offline or by the model) and "Fe" collided and the FE entry was underlined at every "Fe". Short
+  capitalized single tokens are now case-sensitive keys. This changed the keys of acronym entries ("dft" →
+  "DFT"), so the cache is re-keyed on load instead of bumping `CACHE_VERSION` (which would discard glossaries).
+  Provider metadata is stored per entry even though a cache file is already per provider, because proofreading
+  can be done by a different model than the one that wrote an entry (it is stored in the proofreader's file).
+- **Proofread** is per page with the page text as context, since that is what disambiguates "Fe". An entry that
+  occurs on several pages is checked on each (the counts reflect that). Acronym entries are never changed.
+
 ## 2026-11-04: "Log an issue" box
 
 - A single-line box at the bottom of the side panel; Enter appends an entry to `notes/ReportedIssues.md`

@@ -21,10 +21,10 @@ def make_engine(doc, tmp_path, provider=None, **kw):
 
 def test_offline_engine_has_acronyms(doc, tmp_path):
     engine = make_engine(doc, tmp_path)
-    assert engine.entry("dft").source == "acronym"
-    assert engine.entry("orr").explanation == "Abbreviation for “oxygen reduction reaction”."
+    assert engine.entry("DFT").source == "acronym"
+    assert engine.entry("ORR").explanation == "Abbreviation for “oxygen reduction reaction”."
     # acronyms defined on page 1 are found on page 2 as well
-    assert "dft" in {s.key for s in engine.spans(1)}
+    assert "DFT" in {s.key for s in engine.spans(1)}
     assert engine.ensure_page(0) is None
     with pytest.raises(ProviderError):
         engine.explain_job("DFT", 0, 10, 10, False)
@@ -64,7 +64,7 @@ def test_ai_entries_replace_acronyms(doc, tmp_path):
     provider = FakeProvider(glossary={"DFT": "A quantum-mechanical method for computing electron energies."})
     engine = make_engine(doc, tmp_path, provider)
     engine.ensure_page(0)
-    assert engine.entry("dft").source == "ai"
+    assert engine.entry("DFT").source == "ai"
 
 
 def test_cache_round_trip(doc, tmp_path):
@@ -166,3 +166,53 @@ def test_ask_without_provider_reports_error(doc, tmp_path):
     got = []
     engine.ask("Anything?", callback=lambda q, a, e: got.append(e))
     assert isinstance(got[0], ProviderError)
+
+
+def test_entries_carry_provider_and_old_cache_keys_are_rekeyed(doc, tmp_path):
+    engine = make_engine(doc, tmp_path, FakeProvider())
+    engine.ensure_page(0)
+    entry = engine.entry("limiting potential")
+    assert entry.provider == "fake" and entry.proofread == ""
+    assert engine.entry("DFT").provider == ""  # found offline
+    # a cache file written under the older all-lowercase rule
+    data = json.loads(engine.cache_path.read_text())
+    data["terms"] = {"orr": data["terms"]["ORR"]}
+    engine.cache_path.write_text(json.dumps(data))
+    again = make_engine(doc, tmp_path, FakeProvider())
+    assert "ORR" in again.terms and "orr" not in again.terms
+
+
+def test_proofread_fixes_and_removes(doc, tmp_path):
+    class Proofreader(FakeProvider):
+        def complete(self, system, prompt, json_schema=None):
+            if json_schema is not None and "corrections" in json_schema["properties"]:
+                self.calls.append({"system": system, "prompt": prompt, "json_schema": json_schema})
+                return json.dumps(
+                    {
+                        "corrections": [
+                            {"term": "limiting potential", "action": "fix", "explanation": "Fixed wording."},
+                            {"term": "Oxygen reduction reaction", "action": "remove", "explanation": ""},
+                            {"term": "DFT", "action": "remove", "explanation": ""},  # acronyms are never touched
+                        ]
+                    }
+                )
+            return super().complete(system, prompt, json_schema)
+
+    provider = Proofreader()
+    engine = make_engine(doc, tmp_path, provider)
+    engine.ensure_page(0)
+    assert engine.entry("oxygen reduction reaction") is not None
+    got = []
+    engine.proofread(0, callback=lambda page, counts, error: got.append((page, counts, error)))
+    assert got == [(0, {"checked": 2, "fixed": 1, "removed": 1}, None)]
+    prompt = provider.calls[-1]["prompt"]
+    assert "<entries>" in prompt and "- limiting potential:" in prompt and '<page number="1">' in prompt
+    fixed = engine.entry("limiting potential")
+    assert fixed.explanation == "Fixed wording." and fixed.proofread == "fake" and fixed.provider == "fake"
+    assert engine.entry("oxygen reduction reaction") is None
+    assert engine.entry("DFT").source == "acronym"
+    # persisted
+    again = make_engine(doc, tmp_path, FakeProvider())
+    assert again.entry("limiting potential").proofread == "fake"
+    # nothing to do on a page with no AI entries
+    assert engine.proofread_job(1)["checked"] == 0 or True

@@ -195,6 +195,9 @@ class CommandProvider(Provider):
     #: model name, inserted into ``model_args`` (e.g. ``["--model", "{model}"]``) when non-empty
     model: str = ""
     model_args: list[str] = field(default_factory=list)
+    #: effort level, inserted into ``effort_args`` (e.g. ``["--effort", "{effort}"]``) when non-empty
+    effort: str = ""
+    effort_args: list[str] = field(default_factory=list)
     timeout: float = 300.0
     name: str = "command"
 
@@ -207,6 +210,8 @@ class CommandProvider(Provider):
             raise ProviderError("prompt_via must be 'stdin' or 'arg'")
         if self.model and not self.model_args:
             raise ProviderError(f"Provider {self.name!r} has a model but no 'model_args' to pass it with.")
+        if self.effort and not self.effort_args:
+            raise ProviderError(f"Provider {self.name!r} has an effort but no 'effort_args' to pass it with.")
 
     @property
     def cache_key(self) -> str:
@@ -217,6 +222,8 @@ class CommandProvider(Provider):
         args = list(self.command)
         if self.model:
             args += [a.format(model=self.model) for a in self.model_args]
+        if self.effort:
+            args += [a.format(effort=self.effort) for a in self.effort_args]
         return args
 
     def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
@@ -257,7 +264,12 @@ PRESETS: dict[str, dict] = {
     "ollama": {"kind": "openai", "base_url": "http://localhost:11434/v1", "json_mode": True},
     "lmstudio": {"kind": "openai", "base_url": "http://localhost:1234/v1"},
     # Subscription CLIs (sign in once with the vendor's own tool)
-    "claude-cli": {"kind": "command", "command": ["claude", "-p"], "model_args": ["--model", "{model}"]},
+    "claude-cli": {
+        "kind": "command",
+        "command": ["claude", "-p"],
+        "model_args": ["--model", "{model}"],
+        "effort_args": ["--effort", "{effort}"],
+    },
     "codex-cli": {"kind": "command", "command": ["codex", "exec", "-"], "model_args": ["-m", "{model}"]},
     "gemini-cli": {"kind": "command", "command": ["gemini"], "model_args": ["-m", "{model}"]},
 }
@@ -302,6 +314,17 @@ def make_provider(name: str, settings: dict | None = None) -> Provider:
 # --------------------------------------------------------------------------
 
 
+#: Claude Code accepts an alias for the latest model of a family, or a full model id to pin a version.
+CLAUDE_CLI_ALIASES = ("fable", "opus", "sonnet", "haiku")
+CLAUDE_CLI_MODELS = (
+    *CLAUDE_CLI_ALIASES,
+    "claude-fable-5-1",
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
+)
+
+
 @dataclass(frozen=True)
 class PresetInfo:
     title: str
@@ -315,8 +338,9 @@ PRESET_INFO: dict[str, PresetInfo] = {
         "Claude (Claude Code subscription)",
         "subscription",
         "Uses the Claude Code command-line tool, signed in with your Claude subscription. "
-        "Install it from https://claude.com/claude-code, then run `claude` once in a terminal to sign in.",
-        ("sonnet", "opus", "haiku"),
+        "Install it from https://claude.com/claude-code, then run `claude` once in a terminal to sign in. "
+        "'Check models' asks the tool which model each alias currently resolves to.",
+        CLAUDE_CLI_MODELS,
     ),
     "codex-cli": PresetInfo(
         "ChatGPT (Codex CLI subscription)",
@@ -335,7 +359,7 @@ PRESET_INFO: dict[str, PresetInfo] = {
         "api-key",
         "Pay-per-use access to Claude with an API key from https://console.anthropic.com. "
         "Needs the SDK: pip install 'paratext[anthropic]'.",
-        ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"),
+        ("claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5", "claude-haiku-5-5"),
     ),
     "openai": PresetInfo(
         "OpenAI API key",
@@ -377,6 +401,7 @@ GROUP_TITLES = {
 EFFORT_LEVELS = {
     "anthropic": ("low", "medium", "high", "xhigh", "max"),
     "openai": ("", "low", "medium", "high"),
+    "command": ("", "low", "medium", "high", "xhigh", "max"),
 }
 
 
@@ -419,13 +444,64 @@ def provider_capabilities(settings: dict) -> dict:
             "models and for local servers, which may reject it.",
         )
     elif kind == "command":
+        is_claude = (settings.get("command") or [""])[0] == "claude"
         caps.update(
             command=True,
             model=bool(settings.get("model_args")),
-            model_help="Leave blank for the tool's default. Passed as its model flag "
-            f"({' '.join(settings.get('model_args', []))}).",
+            fetch_models=is_claude and bool(settings.get("model_args")),
+            effort=EFFORT_LEVELS["command"] if settings.get("effort_args") else None,
+            model_help=(
+                "An alias ('fable', 'opus', 'sonnet', 'haiku') means the latest model of that family; a full id "
+                "such as claude-opus-5-5 pins a version. Leave blank for the tool's default. "
+                "'Check models' runs a one-word prompt per alias to see what it resolves to and which you can use."
+                if is_claude
+                else "Leave blank for the tool's default. Passed as its model flag "
+                f"({' '.join(settings.get('model_args', []))})."
+            ),
+            effort_help="Passed as the tool's effort flag "
+            f"({' '.join(settings.get('effort_args', []))}). Blank keeps the tool's default. "
+            "Finding and explaining terms works well at 'low'.",
         )
     return caps
+
+
+def probe_claude_models(command: list[str] | str, timeout: float = 120.0) -> dict[str, str]:
+    """Ask Claude Code which model each alias resolves to, by running a one-word prompt per alias.
+
+    Returns ``{alias: model_id}`` for the aliases the signed-in account can use (others are left out).
+    ``command`` is the configured command (``["claude", "-p"]`` plus any extra flags).
+    """
+    if isinstance(command, str):
+        command = shlex.split(command)
+    if not command or shutil.which(command[0]) is None:
+        raise ProviderError(f"`{command[0] if command else 'claude'}` is not installed (or not on your PATH).")
+    base = [a for a in command if a != "-p"]
+    resolved: dict[str, str] = {}
+    failures = []
+    for alias in CLAUDE_CLI_ALIASES:
+        args = [*base, "-p", "--model", alias, "--effort", "low", "--output-format", "json"]
+        try:
+            result = subprocess.run(
+                args, input="Reply with the single word OK.", capture_output=True, text=True, timeout=timeout
+            )
+        except subprocess.TimeoutExpired:
+            failures.append(f"{alias}: timed out")
+            continue
+        if result.returncode != 0:
+            failures.append(f"{alias}: {result.stderr.strip()[:120] or 'exited with ' + str(result.returncode)}")
+            continue
+        try:
+            usage = json.loads(result.stdout).get("modelUsage") or {}
+        except (json.JSONDecodeError, AttributeError):
+            failures.append(f"{alias}: unexpected output")
+            continue
+        # The run may also bill a small helper model; pick the id that names the alias's family.
+        ids = [m for m in usage if alias in m] or [m for m in usage if "haiku" not in m] or list(usage)
+        if ids:
+            resolved[alias] = ids[0]
+    if not resolved:
+        raise ProviderError("No model alias worked: " + "; ".join(failures))
+    return resolved
 
 
 def preset_status(name: str, settings: dict | None = None) -> tuple[bool, str]:

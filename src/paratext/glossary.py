@@ -19,17 +19,37 @@ class GlossaryEntry:
     source: str = "ai"
     #: 0-based page where the entry was first found
     page: int | None = None
+    #: cache key of the provider (name, model, effort) that wrote the explanation; "" for offline entries
+    provider: str = ""
+    #: cache key of the provider that proofread the explanation, if any
+    proofread: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
 
 
-def normalize_token(token: str) -> str:
-    """Lowercase a word, expand ligatures, and strip surrounding punctuation (keeps inner hyphens)."""
-    return unicodedata.normalize("NFKC", token).strip(_EDGE_PUNCT).lower()
+#: Single tokens this short that contain a capital letter keep their case: "FE" (Faradaic efficiency) and
+#: "Fe" (iron), or "pH", must not be the same term, and must not be underlined at each other's occurrences.
+CASE_SENSITIVE_MAX_LEN = 4
+
+
+def normalize_token(token: str, keep_case: bool = False) -> str:
+    """Expand ligatures and strip surrounding punctuation (keeps inner hyphens); lowercase unless ``keep_case``."""
+    token = unicodedata.normalize("NFKC", token).strip(_EDGE_PUNCT)
+    return token if keep_case else token.lower()
+
+
+def is_case_sensitive(term: str) -> bool:
+    """True for short single tokens with a capital letter (acronyms, element symbols, "pH")."""
+    raw = normalize_token(term, keep_case=True)
+    return " " not in raw.strip() and 0 < len(raw) <= CASE_SENSITIVE_MAX_LEN and any(c.isupper() for c in raw)
 
 
 def normalize_term(term: str) -> str:
+    """The key a term is stored and matched under: lowercase, except case-sensitive short tokens."""
+    term = " ".join(term.split())
+    if is_case_sensitive(term):
+        return normalize_token(term, keep_case=True)
     return " ".join(normalize_token(t) for t in term.split() if normalize_token(t))
 
 
@@ -58,7 +78,7 @@ def extract_json_object(text: str):
     raise ValueError("No JSON object found in model output")
 
 
-def parse_terms(text: str, page: int | None = None) -> list[GlossaryEntry]:
+def parse_terms(text: str, page: int | None = None, provider: str = "") -> list[GlossaryEntry]:
     """Turn a model reply into glossary entries (invalid items are dropped)."""
     data = extract_json_object(text)
     items = data.get("terms", []) if isinstance(data, dict) else data
@@ -69,8 +89,25 @@ def parse_terms(text: str, page: int | None = None) -> list[GlossaryEntry]:
         term = str(item.get("term", "")).strip()
         explanation = str(item.get("explanation", "")).strip()
         if term and explanation and normalize_term(term):
-            entries.append(GlossaryEntry(term, explanation, "ai", page))
+            entries.append(GlossaryEntry(term, explanation, "ai", page, provider))
     return entries
+
+
+def parse_corrections(text: str) -> list[tuple[str, str, str]]:
+    """Turn a proofreading reply into ``(term, action, explanation)`` with action keep, fix or remove."""
+    data = extract_json_object(text)
+    items = data.get("corrections", []) if isinstance(data, dict) else data
+    out = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        term = str(item.get("term", "")).strip()
+        action = str(item.get("action", "keep")).strip().lower()
+        explanation = str(item.get("explanation", "") or "").strip()
+        if not term or action not in ("keep", "fix", "remove") or (action == "fix" and not explanation):
+            continue
+        out.append((term, action, explanation))
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -132,8 +169,8 @@ class Span:
     end: int  # last word index (inclusive)
 
 
-def page_tokens(words: list[str], line_ends: set[int] | None = None) -> list[tuple[str, int, int]]:
-    """Normalize page words into ``(token, first_word_idx, last_word_idx)``.
+def page_tokens(words: list[str], line_ends: set[int] | None = None) -> list[tuple[str, int, int, str]]:
+    """Normalize page words into ``(token, first_word_idx, last_word_idx, token_with_case)``.
 
     Words that end in '-' at the end of a line are joined with the next word
     ("elec-" + "tron" -> "electron").
@@ -144,12 +181,13 @@ def page_tokens(words: list[str], line_ends: set[int] | None = None) -> list[tup
     while i < len(words):
         word = words[i]
         if word.endswith("-") and i in line_ends and i + 1 < len(words):
-            tokens.append((normalize_token(word[:-1] + words[i + 1]), i, i + 1))
+            joined = word[:-1] + words[i + 1]
+            tokens.append((normalize_token(joined), i, i + 1, normalize_token(joined, keep_case=True)))
             i += 2
             continue
         tok = normalize_token(word)
         if tok:
-            tokens.append((tok, i, i))
+            tokens.append((tok, i, i, normalize_token(word, keep_case=True)))
         i += 1
     return tokens
 
@@ -157,17 +195,20 @@ def page_tokens(words: list[str], line_ends: set[int] | None = None) -> list[tup
 def find_spans(words: list[str], terms: list[str], line_ends: set[int] | None = None) -> list[Span]:
     """Locate every occurrence of each term among ``words``.
 
-    Matching is case-insensitive and ignores surrounding punctuation.  Longer
-    terms win where matches overlap.
+    Matching ignores surrounding punctuation and is case-insensitive, except for
+    short capitalized tokens (see ``is_case_sensitive``), which must match exactly.
+    Longer terms win where matches overlap.
     """
     tokens = page_tokens(words, line_ends)
-    token_text = [t[0] for t in tokens]
+    lower_text = [t[0] for t in tokens]
+    cased_text = [t[3] for t in tokens]
     keys = sorted({normalize_term(t) for t in terms if normalize_term(t)}, key=lambda k: -len(k.split()))
     used = [False] * len(tokens)
     spans = []
     for key in keys:
         parts = key.split()
         n = len(parts)
+        token_text = cased_text if is_case_sensitive(key) else lower_text
         for i in range(len(tokens) - n + 1):
             if token_text[i : i + n] == parts and not any(used[i : i + n]):
                 used[i : i + n] = [True] * n

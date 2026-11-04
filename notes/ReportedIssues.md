@@ -7,7 +7,12 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-04 10:35 — AI setup lacks model version, effort, and Fable options
 
 - **Category:** feature
-- **Status:** open
+- **Status:** done (2026-11-04). The Claude Code option now has an Effort row (`--effort low…max`, blank = the
+  tool's default), a model list with the aliases `fable`, `opus`, `sonnet`, `haiku` plus the full ids that pin a
+  version, and a "Check models" button that runs a one-word prompt per alias and shows what each resolves to
+  (verified live: `fable` → `claude-fable-5-1`, `opus` → `claude-opus-5-5` with Claude Code 2.1.318). The
+  Anthropic API option lists `claude-fable-5-1` too. The CLI has no model-listing command, so probing is the
+  only way; it costs four tiny requests. Codex/Gemini CLIs: still model only (effort flags unverified).
 - Paper: Enhanced glycerol valorization via descriptor-guided dual-site engineering in Ni-doped MnO2 (page 1 of 13), `/Users/richb/Desktop/Patty-proj/1-s2.0-S0926337325011105-main.pdf`
 - AI: claude-cli:claude -p; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: paraText
@@ -21,7 +26,9 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-04 10:37 — Hover explanation textbox disappears after about one second
 
 - **Category:** ui
-- **Status:** open
+- **Status:** done (2026-11-04). `QToolTip` (which auto-hides) is replaced by `reader/popup.ExplanationPopup`,
+  a small frameless window that stays open, also after the mouse leaves the term, until you hover another
+  term, click or scroll the page, press Escape, or switch away from the window. Its text is selectable.
 - Paper: Enhanced glycerol valorization via descriptor-guided dual-site engineering in Ni-doped MnO2 (page 1 of 13), `/Users/richb/Desktop/Patty-proj/1-s2.0-S0926337325011105-main.pdf`
 - AI: claude-cli:claude -p; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: paraText
@@ -35,7 +42,13 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-04 10:40 — "Fe" explained as Faradaic Efficiency instead of iron
 
 - **Category:** explanation-quality
-- **Status:** open
+- **Status:** done (2026-11-04), three parts. (1) Root cause was matching, not only the model: terms were
+  matched case-insensitively, so the acronym entry "FE" was underlined at every "Fe" and its explanation shown
+  for iron. Short capitalized tokens (≤4 characters: FE, Fe, pH, DFT) now keep their case as keys and match
+  exactly; the glossary cache is re-keyed on load. (2) Every AI entry records the provider cache key (tool,
+  model, effort) that produced it, and the popup/panel footer shows it, plus "proofread by …" when applicable.
+  (3) A "Proofread" toolbar action sends each explained page's text and its entries to the current model, which
+  returns keep/fix/remove per entry; fixes replace the text, removals drop the underline.
 - Paper: Enhanced glycerol valorization via descriptor-guided dual-site engineering in Ni-doped MnO2 (page 1 of 13), `/Users/richb/Desktop/Patty-proj/1-s2.0-S0926337325011105-main.pdf`
 - AI: claude-cli:claude -p; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: FE

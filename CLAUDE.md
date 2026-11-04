@@ -51,7 +51,11 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   - `parse_terms` reads model JSON robustly (code fences, prose around it).
   - `extract_acronyms` finds "long form (ACR)" definitions offline.
   - `find_spans` locates terms among page words: case-insensitive, edge punctuation stripped, NFKC, joins
-    line-end hyphenation, and the longest match wins. Terms are keyed by `normalize_term`.
+    line-end hyphenation, and the longest match wins. Terms are keyed by `normalize_term`, which lowercases
+    except for short capitalized single tokens (≤4 chars: "FE", "Fe", "pH", "DFT"); those keep their case and
+    match exactly (`is_case_sensitive`), so an acronym is not underlined at an element symbol.
+  - `GlossaryEntry.provider`/`proofread` record the provider cache key that wrote / checked an entry;
+    `parse_corrections` reads the proofreading reply (keep/fix/remove per term).
 - **`ai/providers.py`**: `Provider.complete(system, prompt, json_schema=None) -> str`. There are three kinds:
   - `OpenAICompatibleProvider` (stdlib urllib). It covers OpenAI, Gemini's OpenAI endpoint, OpenRouter, Ollama and
     LM Studio.
@@ -60,7 +64,10 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
     (json_schema) when a schema is given. For models in `_FALLBACK_MODELS` it adds
     `fallbacks="default"` + beta `server-side-fallback-2026-07-01`. `stop_reason == "refusal"` raises.
   - `CommandProvider` (subprocess, prompt on stdin). These are the "subscription" presets:
-    `claude -p`, `codex exec -`, `gemini`.
+    `claude -p`, `codex exec -`, `gemini`. `model_args`/`effort_args` templates add the tool's flags;
+    `claude-cli` has both (`--model X --effort Y`, verified live 2026-11-04 with Claude Code 2.1.318).
+    `probe_claude_models` runs a one-word prompt per alias (`fable`, `opus`, `sonnet`, `haiku`) with
+    `--output-format json` and reads `modelUsage` to learn the resolved ids ("Check models" in the dialog).
 
   `PRESETS` + `make_provider(name, settings)` build providers from config. Every failure becomes a
   `ProviderError`, which the GUI/CLI show to the user. `PRESET_INFO` (titles, descriptions, suggested models),
@@ -98,8 +105,10 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   body, footer, buttons). Engine callbacks run on worker threads; they call `EngineSignals.*.emit`, and Qt delivers
   the slots on the GUI thread. Term spans per page are recomputed lazily (`_ensure_spans`) when
   `_glossary_version` changes. Visible pages plus the next one are requested as you scroll; "Explain whole paper"
-  queues every page. Tooltips are `QToolTip.showText(..., rect)` with rich text and explicit colours
-  (`TOOLTIP_STYLE`), so they are readable in dark mode and get repositioned at screen edges by Qt.
+  queues every page. Hover explanations are `reader/popup.ExplanationPopup`, a frameless
+  `ToolTip`-type window with explicit colours that stays open until another term is hovered, the viewport gets
+  a click/wheel/key (event filter), Escape, or the window deactivates. `QToolTip` auto-hid after a second or so
+  (reported issue, 2026-11-04). `TOOLTIP_STYLE` still styles ordinary widget tooltips.
 - **`reader/setup.SetupDialog`**: list of options (presets grouped as subscription / API key / local, plus custom
   entries) with a readiness mark, a form whose rows and choices come from `provider_capabilities`, "Fetch
   models", "Send a test prompt" (both on `QThreadPool` with `_JobSignals`), and "Save and use", which validates

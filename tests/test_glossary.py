@@ -40,6 +40,33 @@ def test_parse_terms_bare_list():
 def test_normalize_term():
     assert normalize_term("  (Density  Functional Theory), ") == "density functional theory"
     assert normalize_term("plane-wave") == "plane-wave"
+    # short capitalized tokens keep their case: Faradaic efficiency and iron are different terms
+    assert normalize_term("FE") == "FE" and normalize_term("Fe") == "Fe" and normalize_term("(pH)") == "pH"
+    assert normalize_term("fe") == "fe" and normalize_term("NiMnO2") == "nimno2"
+
+
+def test_short_capitalized_terms_match_case_sensitively():
+    words = "The FE of Fe sites was 90%; the FE rose, and fe is not a word.".split()
+    spans = find_spans(words, ["FE", "Fe"])
+    assert [(s.key, s.start) for s in spans] == [("FE", 1), ("Fe", 3), ("FE", 8)]
+    # a lowercase term still matches any case
+    assert [(s.key, s.start) for s in find_spans(words, ["fe"])] == [("fe", 1), ("fe", 3), ("fe", 8), ("fe", 11)]
+
+
+def test_parse_corrections():
+    from paratext.glossary import parse_corrections
+
+    text = """{"corrections": [
+        {"term": "FE", "action": "keep", "explanation": ""},
+        {"term": "Fe", "action": "fix", "explanation": "The chemical symbol for iron."},
+        {"term": "the", "action": "remove", "explanation": ""},
+        {"term": "x", "action": "fix", "explanation": ""},
+        {"term": "", "action": "keep"}, {"term": "y", "action": "maybe"}]}"""
+    assert parse_corrections(text) == [
+        ("FE", "keep", ""),
+        ("Fe", "fix", "The chemical symbol for iron."),
+        ("the", "remove", ""),
+    ]
 
 
 def test_extract_acronyms():
@@ -66,7 +93,7 @@ def test_page_tokens_joins_line_end_hyphens():
     words = ["the", "elec-", "tron", "is", "self-", "consistent"]
     tokens = page_tokens(words, line_ends={1})
     assert [t[0] for t in tokens] == ["the", "electron", "is", "self-", "consistent"]
-    assert tokens[1][1:] == (1, 2)
+    assert tokens[1][1:3] == (1, 2) and tokens[1][3] == "electron"
 
 
 def test_find_spans():
@@ -75,9 +102,9 @@ def test_find_spans():
     got = [(s.key, s.start, s.end) for s in spans]
     assert got == [
         ("oxygen reduction reaction", 1, 3),
-        ("orr", 4, 4),
+        ("ORR", 4, 4),
         ("limiting potential", 7, 8),
-        ("orr", 9, 9),
+        ("ORR", 9, 9),
         ("reduction", 12, 12),
     ]
 

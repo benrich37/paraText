@@ -9,7 +9,8 @@ Scientists* project (2022; [original project](#the-original-paratext-widget-2022
 
 Open a PDF and paraText underlines the terms on each page that your chosen audience is likely to need explained:
 
-- **Hover** over an underlined term for a short explanation, in the sense the paper uses it.
+- **Hover** over an underlined term for a short explanation, in the sense the paper uses it. The popup stays
+  until you hover another term, click or scroll the page, or press Escape, so you can read or copy it.
 - **Click** a term to show it in the side panel; **More depth** asks for a fuller explanation.
 - **Drag** across any words and press **Explain selection** to have that phrase explained using the surrounding
   passage.
@@ -21,6 +22,9 @@ Open a PDF and paraText underlines the terms on each page that your chosen audie
   non-editable install). The configured model adds a title and a short write-up. The file is a to-do list for
   development sessions.
 - Change **Explain for:** (e.g. "a high-school student", "a chemist new to electrocatalysis") to retarget everything.
+- **Proofread** asks the current model to re-read each explained page and fix or drop explanations that got a
+  term wrong (for example "Fe" read as an abbreviation rather than iron). Every explanation shows which tool,
+  model and effort produced it, and who proofread it.
 
 Orange underlines are AI explanations. Blue underlines are acronyms defined in the paper itself ("density functional
 theory (DFT)"). These are found without any AI, so the reader is useful even when no provider is set up. Results are
@@ -68,7 +72,7 @@ so there are three ways to connect:
 
 | Route | Presets | What you need |
 |---|---|---|
-| **Your chat subscription, via the vendor's own CLI** | `claude-cli`, `codex-cli`, `gemini-cli` | Install [Claude Code](https://claude.com/claude-code), OpenAI's Codex CLI, or Google's Gemini CLI and sign in once. paraText runs it as a subprocess. |
+| **Your chat subscription, via the vendor's own CLI** | `claude-cli`, `codex-cli`, `gemini-cli` | Install [Claude Code](https://claude.com/claude-code), OpenAI's Codex CLI, or Google's Gemini CLI and sign in once. paraText runs it as a subprocess. For Claude Code you can pick a model alias (`fable`, `opus`, `sonnet`, `haiku`) or a full id, an effort level, and press "Check models" to see what your account resolves each alias to. |
 | **A developer API key** (pay per use) | `anthropic`, `openai`, `gemini`, `openrouter` | Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `OPENROUTER_API_KEY`, and pick a `model` in the config. |
 | **A local model** (free, private) | `ollama`, `lmstudio` | Run the local server and set `model`. |
 

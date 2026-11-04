@@ -36,6 +36,7 @@ from paratext.ai.providers import (
     list_models,
     make_provider,
     preset_status,
+    probe_claude_models,
     provider_capabilities,
 )
 from paratext.config import Config
@@ -290,6 +291,7 @@ class SetupDialog(QDialog):
         self.model_combo.setCurrentText(merged.get("model", ""))
         self.model_combo.blockSignals(False)
         self.model_note.setText(caps["model_help"])
+        self.fetch_button.setText("Check models" if kind == "command" else "Fetch models")
         self.effort_combo.blockSignals(True)
         self.effort_combo.clear()
         if caps["effort"]:
@@ -372,6 +374,12 @@ class SetupDialog(QDialog):
 
     def fetch_models(self) -> None:
         merged = {**self._merged(), **self.current_settings()}
+        if merged.get("kind") == "command":
+            command = merged.get("command") or []
+            self.result_label.setText("Asking the tool which models it can use (one short prompt per alias)…")
+            self.fetch_button.setEnabled(False)
+            self.pool.start(_Job(lambda: probe_claude_models(command), self._models_signals))
+            return
         base_url = self.base_url_edit.text().strip() or merged.get("base_url", "")
         key = self.key_edit.text().strip() or None
         env = merged.get("api_key_env")
@@ -387,6 +395,18 @@ class SetupDialog(QDialog):
         self.fetch_button.setEnabled(True)
         if error:
             self.result_label.setText(f"Could not list models: {error}")
+            return
+        if isinstance(models, dict):  # alias -> resolved id, from a subscription CLI probe
+            mapping = ", ".join(f"{alias} = {model}" for alias, model in models.items())
+            models = ["", *models, *models.values()]
+            current = self.model_combo.currentText()
+            self.model_combo.blockSignals(True)
+            self.model_combo.clear()
+            self.model_combo.addItems(models)
+            self.model_combo.setCurrentText(current if current in models else "")
+            self.model_combo.blockSignals(False)
+            self._update_status()
+            self.result_label.setText(f"Usable now: {mapping}.")
             return
         current = self.model_combo.currentText()
         self.model_combo.blockSignals(True)

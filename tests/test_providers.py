@@ -214,6 +214,11 @@ def test_command_provider_model_flag():
 def test_cli_presets_take_a_model():
     p = make_provider("claude-cli", {"preset": "claude-cli", "model": "sonnet"})
     assert p.full_command() == ["claude", "-p", "--model", "sonnet"]
+    p = make_provider("claude-cli", {"preset": "claude-cli", "model": "fable", "effort": "low"})
+    assert p.full_command() == ["claude", "-p", "--model", "fable", "--effort", "low"]
+    assert p.cache_key.endswith("--model fable --effort low")
+    with pytest.raises(ProviderError, match="effort_args"):
+        CommandProvider(command=["x"], effort="low")
     assert make_provider("codex-cli", {"preset": "codex-cli", "model": "m"}).full_command()[-2:] == ["-m", "m"]
 
 
@@ -225,7 +230,10 @@ def test_provider_capabilities():
     assert ollama["fetch_models"] and ollama["base_url"] and not ollama["api_key"]
     assert ollama["effort"][0] == ""  # blank = don't send reasoning_effort
     cli = provider_capabilities(PRESETS["claude-cli"])
-    assert cli["command"] and cli["model"] and cli["effort"] is None and "--model" in cli["model_help"]
+    assert cli["command"] and cli["model"] and cli["fetch_models"] and "alias" in cli["model_help"]
+    assert cli["effort"] == ("", "low", "medium", "high", "xhigh", "max") and "--effort" in cli["effort_help"]
+    codex = provider_capabilities(PRESETS["codex-cli"])
+    assert codex["model"] and not codex["fetch_models"] and codex["effort"] is None
     assert not provider_capabilities({"kind": "command", "command": ["x"]})["model"]
 
 
@@ -322,3 +330,26 @@ def test_list_models(chat_server):
     assert req["path"] == "/v1/models" and req["headers"]["Authorization"] == "Bearer sk-x"
     with pytest.raises(ProviderError, match="Could not reach"):
         list_models("http://127.0.0.1:9/v1", timeout=2)
+
+
+def test_probe_claude_models(tmp_path, monkeypatch):
+    """A fake `claude` that answers --output-format json like the real tool (2.1.x)."""
+    fake = tmp_path / "claude"
+    fake.write_text(
+        "#!/bin/sh\n"
+        'case "$*" in *haiku*) echo \'{"result":"OK","modelUsage":{"claude-haiku-5-5":{}}}\' ;;\n'
+        '*fable*) echo "no access" >&2; exit 1 ;;\n'
+        '*opus*) echo \'{"result":"OK","modelUsage":{"claude-haiku-5-5":{},"claude-opus-5-5":{}}}\' ;;\n'
+        '*) echo \'{"result":"OK","modelUsage":{"claude-haiku-5-5":{},"claude-sonnet-5-5":{}}}\' ;;\n'
+        "esac\n"
+    )
+    fake.chmod(0o755)
+    from paratext.ai.providers import probe_claude_models
+
+    assert probe_claude_models([str(fake), "-p"]) == {
+        "opus": "claude-opus-5-5",
+        "sonnet": "claude-sonnet-5-5",
+        "haiku": "claude-haiku-5-5",
+    }
+    with pytest.raises(ProviderError, match="not installed"):
+        probe_claude_models(["definitely-not-a-real-command-xyz", "-p"])

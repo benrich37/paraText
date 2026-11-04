@@ -9,8 +9,9 @@ Ordered by priority. Update this file when you finish or discover something. Sta
    mode, tooltip contrast, dialog field widths, that the "Fit width" zoom on open looks right on a Retina display.
 
 1. **Live-test each provider route with real accounts.** No live call has been made yet (see `dev_log.md`).
-   - `claude-cli`: `["claude", "-p"]` with the prompt on stdin, model via `--model X`. Believed correct; confirm
-     that it doesn't try to use tools, and check its startup latency.
+   - `claude-cli`: `["claude", "-p"]` with the prompt on stdin, model via `--model X`, effort via `--effort Y`.
+     Verified 2026-11-04 (Claude Code 2.1.318, about 1.6 s for a one-word reply). Still to check: that it does
+     not try to use tools on a long prompt.
    - `codex-cli`: `["codex", "exec", "-"]`, model via `-m X`. **Unverified**: confirm that `-` reads stdin in the
      current Codex CLI.
    - `gemini-cli`: `["gemini"]` with stdin, model via `-m X`. **Unverified** flags.
