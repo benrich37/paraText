@@ -1,6 +1,6 @@
 # Roadmap and open items
 
-Ordered by priority. Update this file when you finish or discover something. Status as of 2026-11-01.
+Ordered by priority. Update this file when you finish or discover something. Status as of 2026-11-03.
 
 ## Next up (verify what exists)
 
@@ -25,6 +25,10 @@ Ordered by priority. Update this file when you finish or discover something. Sta
    (capped at 4×); check that fast scrolling and zooming feel fine on the 65-page Bazant paper, and tune
    `PixmapCache.limit` / `MAX_RENDER_SCALE` if memory grows.
 3. **Reported slow interpreter exit** (once, tkinter era). See `dev_log.md`; recheck in CI timings.
+3b. **macOS app bundle** (`paratext install-app`, done 2026-11-03): check on screen that the Dock and menu bar say
+   "paraText" (not "python3"), that dropping a PDF on the Dock icon works, and that `claude -p` is found when the
+   app is started from Finder. Possible follow-ups: open each PDF in its own window instead of replacing; a
+   proper Launch-Services-friendly binary (py2app) if the `shell-script`/`launch-disabled` flags ever bite.
 
 ## Improvements
 
@@ -47,6 +51,11 @@ Ordered by priority. Update this file when you finish or discover something. Sta
 
 15. **Highlight and ask.** A question box for the current selection (or a term) that answers in context and
     keeps a per-paper Q&A history in the side panel. This is the feature that will feed the profile.
+    *Partly done 2026-11-03:* the "Ask about the paper as a whole" box (`ContextEngine.ask`, `paratext ask`)
+    answers from the full text and stores the history in the cache file; the panel lists earlier questions under
+    the latest answer. Still to do: tie a question to the current selection/term, follow-up questions that see the
+    previous answer, and a nicer history view than plain text. For Anthropic, prompt caching of the paper block
+    would make repeated questions much cheaper (see item 7).
 16. **Inferred profile updates.** With each answer, request a structured side-channel of proposed profile
     updates with evidence and confidence; show them as pending suggestions in the profile dialog; promote only
     on a second piece of evidence or user acceptance. Store accepted and rejected ones in `notes` with

@@ -141,3 +141,28 @@ def test_thread_pool_dedupes_inflight_requests(doc, tmp_path):
     first.result(timeout=5)
     engine.shutdown()
     assert len(provider.calls) == 1
+
+
+def test_ask_sends_whole_paper_and_caches(doc, tmp_path):
+    provider = FakeProvider(explanation="  Yes: page 2 reports it.  ")
+    engine = make_engine(doc, tmp_path, provider)
+    got = []
+    engine.ask("Does the paper measure the limiting potential?", callback=lambda q, a, e: got.append((q, a, e)))
+    assert got == [("Does the paper measure the limiting potential?", "Yes: page 2 reports it.", None)]
+    prompt = provider.calls[-1]["prompt"]
+    assert '<page number="1">' in prompt and f'<page number="{doc.page_count}">' in prompt
+    assert "<question>\nDoes the paper measure the limiting potential?\n</question>" in prompt
+    assert provider.calls[-1]["json_schema"] is None
+    # same question (ignoring case and spacing) is answered from the cache, also by a fresh engine
+    engine.ask("does the paper  measure the limiting potential?", callback=lambda q, a, e: got.append((q, a, e)))
+    assert len(got) == 2 and len(provider.calls) == 1
+    again = make_engine(doc, tmp_path, FakeProvider())
+    assert again.cached_answer("Does the paper measure the limiting potential?") == "Yes: page 2 reports it."
+    assert again.questions[0]["question"] == "Does the paper measure the limiting potential?"
+
+
+def test_ask_without_provider_reports_error(doc, tmp_path):
+    engine = make_engine(doc, tmp_path, None)
+    got = []
+    engine.ask("Anything?", callback=lambda q, a, e: got.append(e))
+    assert isinstance(got[0], ProviderError)

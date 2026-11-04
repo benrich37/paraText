@@ -13,6 +13,9 @@ Open a PDF and paraText underlines the terms on each page that your chosen audie
 - **Click** a term to show it in the side panel; **More depth** asks for a fuller explanation.
 - **Drag** across any words and press **Explain selection** to have that phrase explained using the surrounding
   passage.
+- **Ask about the paper as a whole** in the box under the side panel ("does this paper show that X causes Y?").
+  The question goes to the model with the full text of the paper, and the answer says where in the paper the
+  support is, or that there is none. Answers are kept per paper, and earlier questions are listed under the latest.
 - Change **Explain for:** (e.g. "a high-school student", "a chemist new to electrocatalysis") to retarget everything.
 
 Orange underlines are AI explanations. Blue underlines are acronyms defined in the paper itself ("density functional
@@ -24,7 +27,13 @@ cached per paper, provider, and audience in `~/.cache/paratext/`, so reopening a
 ```sh
 pip install -e .                    # add [anthropic] to use Claude through an API key
 paratext read paper.pdf             # the GUI (or just: paratext paper.pdf)
+paratext install-app                # macOS: add paraText to Finder's "Open With" menu for PDFs
 ```
+
+On macOS, `paratext install-app` writes `~/Applications/paraText.app`, a thin wrapper around the Python
+environment you ran it from. After that, right-click any PDF > Open With > paraText, or use Get Info > "Open with"
+> Change All to make it the default PDF viewer. Opening a second PDF replaces the one in the running window. Run
+the command again if you move the project or its virtualenv. Output from the app goes to `~/Library/Logs/paraText.log`.
 
 The first time, press **Set up AI…** in the toolbar (or run `paratext setup`). The dialog lists every way to
 connect, shows which ones are ready on your machine, lets you paste an API key, pick a model and (where the
@@ -42,6 +51,7 @@ Command-line tools that share the same cache:
 ```sh
 paratext glossary paper.pdf --pages 1-3 [--json]       # build and print a glossary
 paratext explain paper.pdf "limiting potential" --page 4 [--detailed]
+paratext ask paper.pdf "Does the paper show that the barrier is kinetic?"   # whole-paper question
 paratext providers --check                             # list providers and send each a test prompt
 ```
 

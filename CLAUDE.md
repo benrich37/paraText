@@ -25,7 +25,9 @@ ruff check . && ruff format .              # line length 120; rules pinned in py
 paratext read paper.pdf [--provider NAME]  # GUI
 paratext setup                             # just the AI setup dialog
 paratext glossary paper.pdf --provider none --json   # headless; `none` = offline (acronyms only)
+paratext ask paper.pdf "question"          # whole-paper question (full text in the prompt), headless
 paratext providers [--check]               # readiness of every provider (+ a test prompt for configured ones)
+paratext install-app                       # macOS: write ~/Applications/paraText.app (Finder "Open With" for PDFs)
 ```
 
 Test style matches the user's other repos (crawfish, cvtypecorr): plain pytest functions in `tests/test_*.py`,
@@ -102,6 +104,11 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   with `make_provider` and writes the config. It edits a deep copy of the config; the window adopts
   `dialog.config` on accept. `reader/profile_dialog.ProfileDialog` edits the reader profile the same way
   ("About you…" in the toolbar); the window saves it and rebuilds the engine.
+- **`macapp.py`**: writes the macOS bundle (`Info.plist` claiming `com.adobe.pdf` at rank Alternate, a shell
+  launcher that `exec`s `sys.executable -m paratext read` with the installer's `PATH` baked in, output to
+  `~/Library/Logs/paraText.log`, an icon drawn with QPainter + `iconutil`), then registers it with `lsregister`.
+  Finder hands files over as Apple Events, so `reader/app.FileOpenHandler` (an event filter installed by `run()`)
+  opens `QFileOpenEvent` files; the launcher passes no argv. Verified live on 2026-11-03 with `open -a`.
 - **`config.py`**: TOML at `$PARATEXT_CONFIG` or `~/.config/paratext/config.toml`; the cache is at
   `$PARATEXT_CACHE_DIR` or `~/.cache/paratext`. A missing config means offline mode. `Config.save()` writes the
   file (0600, comments dropped; `tomli-w`); the window saves on provider/audience changes. `paratext config --init`

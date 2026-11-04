@@ -49,3 +49,13 @@ def test_text_context_and_passage(doc):
 def test_render_png(doc):
     png = doc.render_png(0, zoom=1.5)
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_full_text_wraps_pages_and_truncates(tmp_path):
+    doc = PdfDocument(make_sample_pdf(tmp_path / "p.pdf"))
+    text, truncated = doc.full_text()
+    assert not truncated
+    assert text.count("<page number=") == doc.page_count and "DFT" in text
+    short, truncated = doc.full_text(max_chars=10)
+    assert truncated and short.count("<page number=") == 1  # at least the first page is always included
+    doc.close()

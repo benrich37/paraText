@@ -80,3 +80,9 @@ def test_bad_provider_is_reported(setup, capsys):
     _, config, pdf = setup
     assert main(["--config", config, "glossary", pdf, "--provider", "nope"]) == 1
     assert "No provider named" in capsys.readouterr().err
+
+
+def test_ask(setup, capsys):
+    _, config, pdf = setup
+    assert main(["--config", config, "ask", pdf, "Does it use DFT?"]) == 0
+    assert capsys.readouterr().out.strip() == "Explained in context."

@@ -12,8 +12,10 @@ which Qt delivers on the GUI thread.
 from __future__ import annotations
 
 import html
+import logging
+import os
 
-from PySide6.QtCore import QObject, QPoint, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, Qt, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -43,6 +45,8 @@ from paratext.reader.pageview import UNDERLINE_COLORS, DocumentView, TermSpan, l
 from paratext.reader.profile_dialog import ProfileDialog
 from paratext.reader.setup import SetupDialog
 
+log = logging.getLogger(__name__)
+
 # Explicit colours so the tooltip reads the same in light and dark themes
 TOOLTIP_STYLE = "QToolTip { color: #1b1b1b; background-color: #fff9db; border: 1px solid #adb5bd; padding: 6px; }"
 
@@ -57,6 +61,7 @@ class Subject:
 class EngineSignals(QObject):
     page_done = Signal(int, object, object)  # page, entries, error
     explained = Signal(str, object, object)  # phrase, text, error
+    answered = Signal(str, object, object)  # question, answer, error
 
 
 class ReaderWindow(QMainWindow):
@@ -81,6 +86,7 @@ class ReaderWindow(QMainWindow):
         self._signals = EngineSignals()
         self._signals.page_done.connect(self._on_page_done)
         self._signals.explained.connect(self._on_explained)
+        self._signals.answered.connect(self._on_answered)
 
         self.setWindowTitle("paraText reader")
         self.resize(1200, 850)
@@ -207,6 +213,20 @@ class ReaderWindow(QMainWindow):
         buttons.addWidget(self.depth_button)
         buttons.addStretch(1)
         layout.addLayout(buttons)
+        ask_label = QLabel("Ask about the paper as a whole:")
+        ask_label.setStyleSheet("margin-top: 6px;")
+        layout.addWidget(ask_label)
+        ask_row = QHBoxLayout()
+        self.ask_edit = QLineEdit()
+        self.ask_edit.setPlaceholderText("e.g. does the paper show that X causes Y?")
+        self.ask_edit.setClearButtonEnabled(True)
+        self.ask_edit.returnPressed.connect(self.ask_question)
+        ask_row.addWidget(self.ask_edit, 1)
+        self.ask_button = QPushButton("Ask")
+        self.ask_button.setToolTip("Sends the whole paper's text with your question, not just the current page")
+        self.ask_button.clicked.connect(self.ask_question)
+        ask_row.addWidget(self.ask_button)
+        layout.addLayout(ask_row)
         splitter.addWidget(side)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
@@ -216,7 +236,7 @@ class ReaderWindow(QMainWindow):
         self.set_panel(
             "paraText",
             "Hover over an underlined term for a quick explanation. Click a term for details, or drag across "
-            "any words and press “Explain selection”.",
+            "any words and press “Explain selection”. Use the box below to ask about the paper as a whole.",
         )
         self._update_buttons()
 
@@ -242,6 +262,7 @@ class ReaderWindow(QMainWindow):
     def open_pdf(self, path) -> None:
         self.close_document()
         self.doc = PdfDocument(path)
+        log.info("opened %s: %r, %d pages", path, self.doc.title, self.doc.page_count)
         self.setWindowTitle(f"paraText — {self.doc.title}")
         self.view.set_document(self.doc)
         self.page_spin.setRange(1, self.doc.page_count)
@@ -479,6 +500,8 @@ class ReaderWindow(QMainWindow):
         self.explain_button.setEnabled(has_ai and self.view.selection() is not None)
         self.depth_button.setEnabled(has_ai and self.subject is not None)
         self.analyze_action.setEnabled(has_ai)
+        self.ask_edit.setEnabled(has_ai)
+        self.ask_button.setEnabled(has_ai)
 
     def show_term(self, page: int, term: TermSpan) -> None:
         QToolTip.hideText()
@@ -544,11 +567,77 @@ class ReaderWindow(QMainWindow):
             text = (entry.explanation + "\n\n" + text) if entry else text
         self.set_panel(phrase, text, self._footer("ai"))
 
+    # ------------------------------------------------------------------
+    # questions about the whole paper
+    # ------------------------------------------------------------------
+
+    _pending_question: str | None = None
+
+    def ask_question(self) -> None:
+        question = self.ask_edit.text().strip()
+        if not question or not self.engine:
+            return
+        if not self.engine.provider:
+            self.set_panel(question, "No AI provider selected. Choose one in the toolbar.")
+            return
+        self.subject = None
+        self.view.clear_selection()
+        self._pending_question = question
+        self.set_panel(question, "Reading the whole paper…")
+        self._update_buttons()
+        self.engine.ask(question, callback=self._signals.answered.emit)
+
+    def _on_answered(self, question: str, answer, error) -> None:
+        if self._pending_question != question:
+            return
+        self._pending_question = None
+        if error:
+            self.set_panel(question, f"Could not get an answer: {error}")
+            return
+        self.ask_edit.clear()
+        self.set_panel(question, answer + self._earlier_questions(question), self._footer("ai"))
+
+    def _earlier_questions(self, current: str, limit: int = 5) -> str:
+        """Previous Q&A for this paper (newest first), appended below the current answer."""
+        key = self.engine.question_key(current)
+        earlier = [q for q in reversed(self.engine.questions) if self.engine.question_key(q["question"]) != key]
+        if not earlier:
+            return ""
+        blocks = [f"Q: {q['question']}\nA: {q['answer']}" for q in earlier[:limit]]
+        return "\n\n— Earlier questions —\n\n" + "\n\n".join(blocks)
+
+
+class FileOpenHandler(QObject):
+    """Open documents that the OS hands to a running app (macOS "Open With", double-click, drag to the Dock).
+
+    macOS delivers such files as Apple Events, not as command-line arguments; Qt turns them into
+    ``QFileOpenEvent``s on the ``QApplication``. Install with ``app.installEventFilter(handler)``.
+    """
+
+    def __init__(self, window: ReaderWindow):
+        super().__init__(window)
+        self.window = window
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802  (Qt override)
+        if event.type() == QEvent.Type.FileOpen and event.file():
+            log.info("file-open event: %s", event.file())
+            self.window.open_pdf(event.file())
+            self.window.show()
+            self.window.raise_()
+            self.window.activateWindow()
+            return True
+        return super().eventFilter(obj, event)
+
 
 def run(pdf_path=None, provider_name=None, config_path=None) -> int:
     import sys
 
+    if os.environ.get("PARATEXT_LOG"):  # the macOS app bundle sets this; see macapp.py
+        logging.basicConfig(level=os.environ["PARATEXT_LOG"].upper(), format="%(asctime)s %(name)s: %(message)s")
     app = QApplication.instance() or QApplication(sys.argv)
+    app.setApplicationName("paraText")
+    app.setApplicationDisplayName("paraText")
     window = ReaderWindow(Config.load(config_path), pdf_path, provider_name, profile=UserProfile.load())
+    app.installEventFilter(FileOpenHandler(window))
     window.show()
     return app.exec()

@@ -189,3 +189,50 @@ def test_setup_dialog_result_is_applied(window_factory, monkeypatch):
     assert window.provider_box.currentText() == "mine"
     assert window.audience_edit.text() == "a poet"
     assert window.engine.provider is not None
+
+
+def test_file_open_event_opens_pdf(qtbot, tmp_path):
+    """macOS "Open With" delivers the file as a QFileOpenEvent, not as an argument."""
+    from PySide6.QtCore import QUrl
+    from PySide6.QtGui import QFileOpenEvent
+    from PySide6.QtWidgets import QApplication
+
+    from paratext.reader.app import FileOpenHandler
+
+    pdf = make_sample_pdf(tmp_path / "paper.pdf", title="Handed over by Finder")
+    config = Config(cache_dir=tmp_path / "cache", path=tmp_path / "config.toml")
+    window = ReaderWindow(config, None, "none", executor=ImmediateExecutor())
+    qtbot.addWidget(window)
+    app = QApplication.instance()
+    handler = FileOpenHandler(window)
+    app.installEventFilter(handler)
+    try:
+        assert window.doc is None
+        assert app.sendEvent(app, QFileOpenEvent(QUrl.fromLocalFile(str(pdf))))
+        assert window.doc is not None and window.doc.title == "Handed over by Finder"
+        assert window.windowTitle().endswith("Handed over by Finder")
+    finally:
+        app.removeEventFilter(handler)
+
+
+def test_ask_about_whole_paper(window_factory):
+    provider = FakeProvider(explanation="No: it only computes limiting potentials with DFT.")
+    window = window_factory(provider)
+    assert window.ask_button.isEnabled()
+    window.ask_edit.setText("Does the paper measure anything experimentally?")
+    QTest.keyClick(window.ask_edit, Qt.Key.Key_Return)
+    assert window.panel_title.text() == "Does the paper measure anything experimentally?"
+    assert window.panel_body().startswith("No: it only computes")
+    assert "may contain mistakes" in window.panel_footer.text()
+    assert window.ask_edit.text() == ""
+    assert "<page number=" in provider.calls[-1]["prompt"]
+    # a second question lists the first below its answer
+    window.ask_edit.setText("What method is used?")
+    window.ask_button.click()
+    assert "Earlier questions" in window.panel_body()
+    assert "Q: Does the paper measure anything experimentally?" in window.panel_body()
+
+
+def test_ask_disabled_without_ai(window_factory):
+    window = window_factory(None, provider_name="none")
+    assert not window.ask_button.isEnabled() and not window.ask_edit.isEnabled()

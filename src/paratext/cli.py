@@ -1,4 +1,4 @@
-"""Command line: ``paratext read|glossary|explain|providers|config``."""
+"""Command line: ``paratext read|glossary|explain|ask|setup|providers|config|install-app``."""
 
 from __future__ import annotations
 
@@ -99,6 +99,15 @@ def cmd_explain(args, config: Config) -> int:
     return 0
 
 
+def cmd_ask(args, config: Config) -> int:
+    engine = _engine(args, config)
+    text = engine.cached_answer(args.question)
+    if text is None:
+        text = engine.ask_job(args.question)
+    print(text)
+    return 0
+
+
 def cmd_setup(args, config: Config) -> int:
     """Open just the AI setup dialog."""
     import sys as _sys
@@ -139,6 +148,21 @@ def cmd_providers(args, config: Config) -> int:
                 status = 1
         print(line)
     return status
+
+
+def cmd_install_app(args, config: Config) -> int:
+    """Write a macOS app bundle so Finder's "Open With" can open PDFs in the reader."""
+    from paratext.macapp import build_app, register
+
+    app = build_app(args.dest, icon=not args.no_icon)
+    registered = register(app)
+    print(f"wrote {app} (runs {sys.executable})")
+    if registered:
+        print("Registered with Launch Services: right-click a PDF > Open With > paraText. To make it the default,")
+        print("use Get Info on a PDF > Open with > paraText > Change All.")
+    else:
+        print("note: Launch Services not found (not macOS?); the bundle was written but not registered.")
+    return 0
 
 
 def cmd_config(args, config: Config) -> int:
@@ -184,12 +208,23 @@ def build_parser() -> argparse.ArgumentParser:
     ai_args(p)
     p.set_defaults(func=cmd_explain)
 
+    p = sub.add_parser("ask", help="ask a question about the paper as a whole")
+    p.add_argument("pdf")
+    p.add_argument("question")
+    ai_args(p)
+    p.set_defaults(func=cmd_ask)
+
     p = sub.add_parser("setup", help="open the AI setup dialog")
     p.set_defaults(func=cmd_setup)
 
     p = sub.add_parser("providers", help="list configured providers and presets")
     p.add_argument("--check", action="store_true", help="send a tiny test prompt to configured providers")
     p.set_defaults(func=cmd_providers)
+
+    p = sub.add_parser("install-app", help="macOS: write ~/Applications/paraText.app so Finder can open PDFs here")
+    p.add_argument("--dest", help="where to write the bundle (default: ~/Applications/paraText.app)")
+    p.add_argument("--no-icon", action="store_true", help="skip generating the app icon")
+    p.set_defaults(func=cmd_install_app)
 
     p = sub.add_parser("config", help="show or create the config file")
     p.add_argument("--init", action="store_true", help="write a commented template config")

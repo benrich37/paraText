@@ -87,3 +87,26 @@ def explain_prompt(
         f'Explain what "{phrase}" means here, for {audience}. {depth} '
         "Write plain text without headings or markdown."
     )
+
+
+def question_prompt(paper_text: str, question: str, audience: str, truncated: bool = False) -> str:
+    """A free-form question about the paper as a whole, answered from its full text."""
+    note = (
+        "(The paper is long, so only its first pages are included; say if the answer may lie in the rest.)\n\n"
+        if truncated
+        else ""
+    )
+    return (
+        "<paper>\n"
+        f"{paper_text}\n"
+        "</paper>\n\n"
+        f"{note}"
+        "The reader asks the following question about this paper:\n"
+        "<question>\n"
+        f"{question}\n"
+        "</question>\n\n"
+        f"Answer for {audience}, using the paper's own text. Where the paper supports a claim, say where (section, "
+        "figure, table or page); where it does not, say that clearly rather than guessing. Distinguish what the "
+        "paper shows from what it assumes or cites. Be concise: a short paragraph or a few sentences, or a short "
+        "list if the question has several parts. Write plain text without headings or markdown."
+    )

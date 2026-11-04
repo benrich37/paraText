@@ -1,4 +1,4 @@
-"""ContextEngine: builds and caches the glossary and explanations for one PDF.
+"""ContextEngine: builds and caches the glossary, explanations and Q&A for one PDF.
 
 GUI-independent.  AI requests run on an executor (a thread pool by default)
 and report back through callbacks, which are called on the worker thread; a
@@ -57,6 +57,7 @@ class ContextEngine:
         self.terms: dict[str, GlossaryEntry] = {}
         self.processed_pages: set[int] = set()
         self.explanations: dict[str, str] = {}
+        self.questions: list[dict] = []  # [{"question", "answer"}] in the order asked
         self._load_cache()
         self._add_acronyms()
 
@@ -86,6 +87,7 @@ class ContextEngine:
         self.terms = {k: GlossaryEntry(**v) for k, v in data.get("terms", {}).items()}
         self.processed_pages = set(data.get("processed_pages", []))
         self.explanations = dict(data.get("explanations", {}))
+        self.questions = [q for q in data.get("questions", []) if "question" in q and "answer" in q]
 
     def save(self) -> None:
         path = self.cache_path
@@ -101,6 +103,7 @@ class ContextEngine:
                 "processed_pages": sorted(self.processed_pages),
                 "terms": {k: e.to_dict() for k, e in self.terms.items()},
                 "explanations": self.explanations,
+                "questions": self.questions,
             }
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
@@ -220,6 +223,50 @@ class ContextEngine:
         self._pending.add(key)
         future = self.executor.submit(self.explain_job, phrase, page, start, end, detailed)
         future.add_done_callback(lambda f: self._finish(key, f, callback, phrase))
+        return future
+
+    # ------------------------------------------------------------------
+    # questions about the paper as a whole
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def question_key(question: str) -> str:
+        return " ".join(question.split()).lower()
+
+    def cached_answer(self, question: str) -> str | None:
+        key = self.question_key(question)
+        with self._lock:
+            for q in reversed(self.questions):
+                if self.question_key(q["question"]) == key:
+                    return q["answer"]
+        return None
+
+    def ask_job(self, question: str) -> str:
+        """Answer a free-form question from the whole paper's text (blocking)."""
+        if self.provider is None:
+            raise ProviderError("No AI provider configured.")
+        text, truncated = self.doc.full_text()
+        prompt = prompts.question_prompt(text, question, self.audience, truncated)
+        answer = self.provider.complete(self.system_prompt(), prompt).strip()
+        with self._lock:
+            self.questions.append({"question": question.strip(), "answer": answer})
+        self.save()
+        return answer
+
+    def ask(self, question: str, callback: Callable | None = None) -> Future | None:
+        """Answer ``question`` about the paper; ``callback(question, answer, error)`` when done (at once if cached)."""
+        question = question.strip()
+        cached = self.cached_answer(question)
+        if cached is not None:
+            if callback:
+                callback(question, cached, None)
+            return None
+        key = ("ask", self.question_key(question))
+        if key in self._pending:
+            return None
+        self._pending.add(key)
+        future = self.executor.submit(self.ask_job, question)
+        future.add_done_callback(lambda f: self._finish(key, f, callback, question))
         return future
 
     def _finish(self, key, future: Future, callback, label) -> None:

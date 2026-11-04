@@ -116,6 +116,22 @@ class PdfDocument:
         first = self.page_text(0) if self.page_count else ""
         return f"Title: {self.title}\n\n{first[:max_chars]}".strip()
 
+    def full_text(self, max_chars: int = 300_000) -> tuple[str, bool]:
+        """All pages, each wrapped in ``<page number="N">``; returns ``(text, truncated)``.
+
+        The cap keeps requests within what every provider accepts (about 75k tokens); very long papers are cut at
+        a page boundary and the caller says so in the prompt.
+        """
+        parts, size, truncated = [], 0, False
+        for page in range(self.page_count):
+            chunk = f'<page number="{page + 1}">\n{self.page_text(page).strip()}\n</page>'
+            if parts and size + len(chunk) > max_chars:
+                truncated = True
+                break
+            parts.append(chunk)
+            size += len(chunk) + 2
+        return "\n\n".join(parts), truncated
+
     def passage(self, page_no: int, start: int, end: int, radius: int = 60) -> str:
         """Words around word indices ``start..end`` (inclusive) on a page."""
         words = self.words(page_no)

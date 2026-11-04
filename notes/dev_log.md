@@ -2,6 +2,44 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-03 (later): "Ask about the paper as a whole"
+
+- A question box under the side panel (`ReaderWindow.ask_question`), `ContextEngine.ask`/`ask_job`, and
+  `paratext ask`. The prompt (`prompts.question_prompt`) carries the **entire paper** as `<page number="N">`
+  blocks (`PdfDocument.full_text`), not the per-page context the glossary uses, because questions like "does the
+  paper prove X?" need the results and discussion, wherever they are. The cap is 300k characters (about 75k
+  tokens) cut at a page boundary; the prompt then says that only the first pages are included. No provider is
+  known to reject that size; subscription CLIs get it on stdin as before.
+- The prompt asks the model to say *where* the paper supports a claim and to separate what the paper shows from
+  what it assumes or cites, since "does it prove X" is exactly the question models are tempted to answer too
+  generously. `PROMPT_VERSION` was not bumped: no existing prompt changed, and question answers live under their
+  own cache key.
+- Answers are stored as a `questions` list in the same cache file (backwards compatible: older files just lack
+  the key), so the per-paper history survives restarts; the panel appends up to five earlier Q&A pairs below the
+  current answer. A one-shot question has no memory of earlier answers; that is a roadmap item.
+- Verified with tests only (engine, CLI, GUI with `FakeProvider`); no live call, same as everything else.
+
+## 2026-11-03: macOS app bundle ("Open With" for PDFs)
+
+- `paratext install-app` (`macapp.py`) writes `~/Applications/paraText.app`. Chosen over py2app/PyInstaller
+  because the user just wants Finder to open PDFs in the reader from this repo: the bundle's executable is a
+  shell script that `exec`s the installer's `sys.executable` (the project venv) with `-m paratext read`. No
+  copying of Python or Qt, nothing to rebuild after a code change; rerun only if the venv moves.
+- **Finder passes the file as an Apple Event, not as argv.** Verified: `open -a paraText.app x.pdf` starts
+  `python -m paratext read` with no arguments and Qt delivers a `QFileOpenEvent`. `FileOpenHandler` (event filter
+  on the `QApplication`, installed in `run()`) opens it; a second `open` while running opens into the same window.
+  `exec` keeps the PID, so Launch Services delivers the event to the Python process and the Dock shows "paraText"
+  with the bundle path (`lsappinfo` confirmed). The LS dump flags the bundle `shell-script` and `launch-disabled`,
+  which did not stop `open -a` or the document claim (`PDF document`, rank Alternate).
+- The launcher bakes in the installing shell's `PATH` (Finder-launched apps get the minimal system one, which would
+  break the `claude`/`codex`/`gemini` subscription providers) and appends stdout/stderr to
+  `~/Library/Logs/paraText.log`; `PARATEXT_LOG=INFO` turns on `logging.basicConfig` in `run()`.
+- Icon: a QPainter drawing (page lines plus an underlined "para") turned into `.icns` by `sips` + `iconutil`;
+  skipped silently off macOS. Not code-signed; it is a local, per-user install, and Gatekeeper does not object to
+  an unsigned shell-script bundle created locally.
+- Not verified: the window title / menu-bar name as seen on screen (AppleScript needs assistive access), and
+  whether the "launch-disabled" flag matters for drag-and-drop onto the Dock icon.
+
 ## 2026-11-01 (later): model/effort per provider, reader profile
 
 - The setup dialog's rows and choices now come from `providers.provider_capabilities(settings)`: Anthropic has
