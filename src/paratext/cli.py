@@ -1,4 +1,4 @@
-"""Command line: ``paratext read|glossary|explain|ask|setup|providers|config|install-app``."""
+"""Command line: ``paratext read|glossary|explain|ask|links|setup|providers|config|install-app``."""
 
 from __future__ import annotations
 
@@ -108,6 +108,29 @@ def cmd_ask(args, config: Config) -> int:
     return 0
 
 
+def cmd_links(args, config: Config) -> int:
+    """List, add or remove files linked to a paper (SI PDFs, data, folders)."""
+    from paratext.links import LinkStore
+    from paratext.pdf import PdfDocument
+
+    doc = PdfDocument(args.pdf)
+    store = LinkStore()
+    try:
+        for path in args.add or []:
+            link = store.add(doc.sha256, path, args.kind, doc_path=str(doc.path))
+            print(f"linked {link.kind}: {link.path}")
+        for path in args.remove or []:
+            print(f"{'removed' if store.remove(doc.sha256, path) else 'not linked'}: {path}")
+        links = store.links(doc.sha256)
+        if not links:
+            print(f"no files linked to {doc.title} ({store.path})")
+        for link in links:
+            print(f"  [{link.kind}] {link.path}{'' if link.exists else '  (missing)'}")
+    finally:
+        doc.close()
+    return 0
+
+
 def cmd_setup(args, config: Config) -> int:
     """Open just the AI setup dialog."""
     import sys as _sys
@@ -213,6 +236,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("question")
     ai_args(p)
     p.set_defaults(func=cmd_ask)
+
+    p = sub.add_parser("links", help="list or change the files linked to a paper (SI PDFs, data, folders)")
+    p.add_argument("pdf")
+    p.add_argument("--add", nargs="+", metavar="PATH", help="link these files or folders")
+    p.add_argument("--kind", choices=["pdf", "data", "folder"], help="kind for --add (default: by file type)")
+    p.add_argument("--remove", nargs="+", metavar="PATH", help="unlink these paths")
+    p.set_defaults(func=cmd_links)
 
     p = sub.add_parser("setup", help="open the AI setup dialog")
     p.set_defaults(func=cmd_setup)

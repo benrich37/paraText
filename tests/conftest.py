@@ -33,3 +33,9 @@ def tk_root():
     root.geometry("440x100")
     yield root
     root.destroy()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_links(tmp_path, monkeypatch):
+    """Never touch the user's real ~/.config/paratext/links.json from tests."""
+    monkeypatch.setenv("PARATEXT_LINKS", str(tmp_path / "links.json"))

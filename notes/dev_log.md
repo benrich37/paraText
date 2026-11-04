@@ -2,6 +2,17 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-04 (later still): linked files (reported issue 4)
+
+- Links are user data, so they live in the config directory (`links.json`), not the cache, and are keyed by the
+  PDF's SHA-256 (already computed for the cache name) so renaming or moving the paper keeps them. One file for
+  all papers keeps it easy to inspect and back up.
+- Three buttons instead of two: QFileDialog cannot select files and directories in one native dialog, so
+  "Link folder…" is separate from "Link data…" (any files, multi-select). All start in the active PDF's folder.
+- Linked PDFs open in a *second* `ReaderWindow` rather than replacing the paper, since SI is read alongside it.
+  Child windows share the config, provider name and profile but have their own engine and cache file.
+- Not done: feeding linked SI text into whole-paper questions (roadmap item 19).
+
 ## 2026-11-04 (later): first three reported issues
 
 - **Claude Code model/effort/Fable.** Checked live: `claude -p --model fable --effort low --output-format json`

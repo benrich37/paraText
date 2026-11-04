@@ -62,7 +62,13 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-04 11:24 — Add buttons to link SI PDFs and data files to a paper
 
 - **Category:** feature
-- **Status:** open
+- **Status:** done (2026-11-04). The side panel has a "Linked files" list with "Link PDF…", "Link data…" (any
+  file type, several at once) and "Link folder…" buttons; each browser starts in the active PDF's folder. Qt's
+  file dialogs cannot select files and folders in one go, hence the separate folder button. Double-click or
+  "Open" opens a linked PDF in a second paraText window (same provider and profile) and anything else with the
+  system opener; "Unlink" removes a link. Links are stored per paper (keyed by the PDF's hash, so moving or
+  renaming it keeps them) in `~/.config/paratext/links.json`. `paratext links paper.pdf [--add …] [--remove …]`
+  does the same from the terminal. Not yet done: using linked SI text in whole-paper questions (roadmap).
 - Paper: Understanding the Synergy between Fe and Mo Sites in the Nitrate Reduction Reaction on a Bio‐Inspired Bimetallic MXene Electrocatalyst (page 8 of 9), `/Users/richb/Desktop/good_nitrate_refs/Angewandte Chemie - 2023 - Abbott - Understanding the Synergy between Fe and Mo Sites in the Nitrate Reduction Reaction on.pdf`
 - AI: claude-cli:claude -p; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: Which surface facet was adsorption tested on?

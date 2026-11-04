@@ -15,8 +15,8 @@ import html
 import logging
 import os
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QRunnable, Qt, QThreadPool, Signal
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QRunnable, Qt, QThreadPool, QUrl, Signal
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QPushButton,
     QSpinBox,
@@ -39,6 +41,7 @@ from paratext.ai.providers import ProviderError
 from paratext.config import Config
 from paratext.engine import ContextEngine
 from paratext.issues import IssueContext, issues_path, log_issue
+from paratext.links import Link, LinkStore
 from paratext.pdf import PdfDocument
 from paratext.profile import UserProfile
 from paratext.reader.pageview import UNDERLINE_COLORS, DocumentView, TermSpan, line_rects
@@ -112,6 +115,8 @@ class ReaderWindow(QMainWindow):
         self.resize(1200, 850)
         QApplication.instance().setStyleSheet(TOOLTIP_STYLE)
         self.popup = ExplanationPopup()
+        self.links = LinkStore()
+        self._child_windows: list[ReaderWindow] = []
         self._build_ui()
         self.view.viewport().installEventFilter(self)  # clicks, scrolling and keys dismiss the popup
         self._update_provider_ui()
@@ -241,6 +246,36 @@ class ReaderWindow(QMainWindow):
         buttons.addWidget(self.depth_button)
         buttons.addStretch(1)
         layout.addLayout(buttons)
+
+        links_label = QLabel("Linked files (supporting information, data):")
+        links_label.setStyleSheet("margin-top: 6px;")
+        layout.addWidget(links_label)
+        self.links_list = QListWidget()
+        self.links_list.setMaximumHeight(96)
+        self.links_list.setToolTip("Double-click to open: PDFs in a new paraText window, other files with the system")
+        self.links_list.itemDoubleClicked.connect(self.open_link)
+        self.links_list.itemSelectionChanged.connect(self._update_buttons)
+        layout.addWidget(self.links_list)
+        link_row = QHBoxLayout()
+        self.link_pdf_button = QPushButton("Link PDF…")
+        self.link_pdf_button.setToolTip("Link supporting-information or related PDFs to this paper")
+        self.link_pdf_button.clicked.connect(self.link_pdf)
+        self.link_data_button = QPushButton("Link data…")
+        self.link_data_button.setToolTip("Link data files of any type to this paper")
+        self.link_data_button.clicked.connect(self.link_data)
+        self.link_folder_button = QPushButton("Link folder…")
+        self.link_folder_button.clicked.connect(self.link_folder)
+        self.open_link_button = QPushButton("Open")
+        self.open_link_button.clicked.connect(lambda: self.open_link(self.links_list.currentItem()))
+        self.unlink_button = QPushButton("Unlink")
+        self.unlink_button.clicked.connect(self.unlink_selected)
+        for b in (self.link_pdf_button, self.link_data_button, self.link_folder_button):
+            link_row.addWidget(b)
+        link_row.addStretch(1)
+        link_row.addWidget(self.open_link_button)
+        link_row.addWidget(self.unlink_button)
+        layout.addLayout(link_row)
+
         ask_label = QLabel("Ask about the paper as a whole:")
         ask_label.setStyleSheet("margin-top: 6px;")
         layout.addWidget(ask_label)
@@ -308,9 +343,11 @@ class ReaderWindow(QMainWindow):
         self._make_engine()
         self.view.fit_width()  # the view re-fits on resize until the user zooms manually
         self._on_page_changed(0)
+        self._refresh_links()
 
     def close_document(self) -> None:
         self.popup.hide()
+        self.links_list.clear()
         if self.engine:
             self.engine.shutdown()
             self.engine = None
@@ -608,6 +645,12 @@ class ReaderWindow(QMainWindow):
         self.depth_button.setEnabled(has_ai and self.subject is not None)
         self.analyze_action.setEnabled(has_ai)
         self.proofread_action.setEnabled(has_ai)
+        has_doc = self.doc is not None
+        for b in (self.link_pdf_button, self.link_data_button, self.link_folder_button):
+            b.setEnabled(has_doc)
+        selected = has_doc and self.links_list.currentItem() is not None
+        self.open_link_button.setEnabled(selected)
+        self.unlink_button.setEnabled(selected)
         self.ask_edit.setEnabled(has_ai)
         self.ask_button.setEnabled(has_ai)
 
@@ -674,6 +717,89 @@ class ReaderWindow(QMainWindow):
             entry = self.engine.entry(subject.term_key)
             text = (entry.explanation + "\n\n" + text) if entry else text
         self.set_panel(phrase, text, self._footer("ai"))
+
+    # ------------------------------------------------------------------
+    # linked files: SI PDFs, data files, folders
+    # ------------------------------------------------------------------
+
+    def _refresh_links(self) -> None:
+        self.links_list.clear()
+        if self.doc is None:
+            self._update_buttons()
+            return
+        icons = {"pdf": "📄", "data": "📊", "folder": "📁"}
+        for link in self.links.links(self.doc.sha256):
+            item = QListWidgetItem(f"{icons.get(link.kind, '•')} {link.name}")
+            item.setData(Qt.ItemDataRole.UserRole, link)
+            item.setToolTip(link.path if link.exists else f"{link.path}\n(not found)")
+            if not link.exists:
+                item.setForeground(QColor("#868e96"))
+            self.links_list.addItem(item)
+        self._update_buttons()
+
+    def _start_dir(self) -> str:
+        return str(self.doc.path.parent) if self.doc else ""
+
+    def _add_links(self, paths, kind: str | None = None) -> None:
+        if self.doc is None:
+            return
+        added = [self.links.add(self.doc.sha256, p, kind, doc_path=str(self.doc.path)) for p in paths if p]
+        self._refresh_links()
+        if added:
+            self.links_list.setCurrentRow(self.links_list.count() - 1)
+            self.statusBar().showMessage(f"Linked {len(added)} item(s) to {self.doc.title}.", 6000)
+
+    def link_pdf(self) -> None:
+        start = self._start_dir()
+        paths, _ = QFileDialog.getOpenFileNames(self, "Link PDFs to this paper", start, "PDF files (*.pdf)")
+        self._add_links(paths, "pdf")
+
+    def link_data(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Link data files to this paper", self._start_dir(), "All files (*)"
+        )
+        self._add_links(paths)
+
+    def link_folder(self) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Link a folder to this paper", self._start_dir())
+        self._add_links([path], "folder")
+
+    def selected_link(self) -> Link | None:
+        item = self.links_list.currentItem()
+        return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+    def unlink_selected(self) -> None:
+        link = self.selected_link()
+        if link and self.doc:
+            self.links.remove(self.doc.sha256, link.path)
+            self._refresh_links()
+
+    def open_link(self, item) -> None:
+        link = item.data(Qt.ItemDataRole.UserRole) if item else None
+        if link is None:
+            return
+        if not link.exists:
+            self.statusBar().showMessage(f"Not found: {link.path}")
+            return
+        if link.kind == "pdf":
+            self.open_in_new_window(link.path)
+        else:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(link.path))
+
+    def _forget_child(self, window) -> None:
+        if window in self._child_windows:
+            self._child_windows.remove(window)
+
+    def open_in_new_window(self, path) -> ReaderWindow:
+        """A second reader window (same config, provider and profile), e.g. for a linked SI PDF."""
+        window = ReaderWindow(self.config, path, self.provider_name, executor=self.executor, profile=self.profile)
+        self._child_windows.append(window)
+        window.destroyed.connect(
+            lambda *_: self._child_windows.remove(window) if window in self._child_windows else None
+        )
+        window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        window.show()
+        return window
 
     # ------------------------------------------------------------------
     # questions about the whole paper

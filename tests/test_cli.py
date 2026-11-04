@@ -86,3 +86,15 @@ def test_ask(setup, capsys):
     _, config, pdf = setup
     assert main(["--config", config, "ask", pdf, "Does it use DFT?"]) == 0
     assert capsys.readouterr().out.strip() == "Explained in context."
+
+
+def test_links(setup, capsys, tmp_path):
+    _, config, pdf = setup
+    si = tmp_path / "si.pdf"
+    si.write_bytes(b"%PDF")
+    assert main(["--config", config, "links", pdf, "--add", str(si), str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert f"linked pdf: {si}" in out and "[folder]" in out
+    assert main(["--config", config, "links", pdf, "--remove", str(si)]) == 0
+    out = capsys.readouterr().out
+    assert "removed" in out and "[pdf]" not in out and "[folder]" in out

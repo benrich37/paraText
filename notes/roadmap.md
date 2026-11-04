@@ -65,6 +65,11 @@ Ordered by priority. Update this file when you finish or discover something. Sta
 18. Per-paper prerequisite graph between glossary entries, so a `needs_help` concept is explained after its
     unknown prerequisites.
 
+## Linked files (done 2026-11-04: `links.py`, side-panel list, `paratext links`)
+
+19. Use linked SI PDFs in "Ask about the paper" (append their `full_text` under a budget) and offer their terms
+    in the glossary; show a linked PDF's page count and title in the list; drag-and-drop onto the list.
+
 ## Bigger ideas
 
 13. A web front-end (local server + PDF.js) that reuses `engine.py`, if a browser-based or remote UI is ever

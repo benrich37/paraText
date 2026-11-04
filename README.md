@@ -17,6 +17,9 @@ Open a PDF and paraText underlines the terms on each page that your chosen audie
 - **Ask about the paper as a whole** in the box under the side panel ("does this paper show that X causes Y?").
   The question goes to the model with the full text of the paper, and the answer says where in the paper the
   support is, or that there is none. Answers are kept per paper, and earlier questions are listed under the latest.
+- **Link files**: "Link PDF…", "Link data…" and "Link folder…" attach supporting-information PDFs, data files
+  or folders to the paper (the browser starts next to the PDF). Linked PDFs open in a second paraText window;
+  other files open with the system. Links are kept per paper in `~/.config/paratext/links.json`.
 - **Log an issue** (the box at the bottom of the side panel) saves a note about something wrong or wanted, with
   what was open at the time, to `notes/ReportedIssues.md` in the source checkout (or `~/.config/paratext/` for a
   non-editable install). The configured model adds a title and a short write-up. The file is a to-do list for
@@ -60,6 +63,7 @@ Command-line tools that share the same cache:
 paratext glossary paper.pdf --pages 1-3 [--json]       # build and print a glossary
 paratext explain paper.pdf "limiting potential" --page 4 [--detailed]
 paratext ask paper.pdf "Does the paper show that the barrier is kinetic?"   # whole-paper question
+paratext links paper.pdf --add paper-SI.pdf data/                           # list or change linked files
 paratext providers --check                             # list providers and send each a test prompt
 ```
 

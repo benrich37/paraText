@@ -282,3 +282,50 @@ def test_log_issue_box(window_factory, qtbot, tmp_path, monkeypatch):
     assert "Tooltip hides page text" in text and "> the underline is too thick" in text
     assert "A Study of Catalysis (page 2 of" in text and "AI: fake" in text
     assert "Issue logged to" in window.statusBar().currentMessage()
+
+
+def test_link_files_panel(window_factory, qtbot, tmp_path, monkeypatch):
+    window = window_factory(FakeProvider())
+    assert window.link_pdf_button.isEnabled() and not window.unlink_button.isEnabled()
+    si = make_sample_pdf(tmp_path / "paper-SI.pdf", title="Supporting Information")
+    data = tmp_path / "raw.csv"
+    data.write_text("x")
+    dialogs = []
+
+    def fake_open(parent, title, start_dir, flt):
+        dialogs.append((title, start_dir, flt))
+        return ([str(si)] if "PDF" in flt else [str(data)]), flt
+
+    monkeypatch.setattr("paratext.reader.app.QFileDialog.getOpenFileNames", staticmethod(fake_open))
+    monkeypatch.setattr("paratext.reader.app.QFileDialog.getExistingDirectory", staticmethod(lambda *a: str(tmp_path)))
+    window.link_pdf()
+    window.link_data()
+    window.link_folder()
+    assert dialogs[0][1] == str(window.doc.path.parent)  # the browser starts beside the active PDF
+    assert [i.text().split(" ", 1)[1] for i in map(window.links_list.item, range(3))] == [
+        "paper-SI.pdf",
+        "raw.csv",
+        tmp_path.name,
+    ]
+    assert "Linked 1 item" in window.statusBar().currentMessage()
+    # links persist per paper and come back on reopen
+    assert [link.kind for link in window.links.links(window.doc.sha256)] == ["pdf", "data", "folder"]
+    # a linked PDF opens in a second reader window
+    window.links_list.setCurrentRow(0)
+    assert window.unlink_button.isEnabled()
+    window.open_link(window.links_list.currentItem())
+    qtbot.waitUntil(lambda: len(window._child_windows) == 1)
+    child = window._child_windows[0]
+    qtbot.addWidget(child)
+    assert child.doc.title == "Supporting Information" and child.provider_name == window.provider_name
+    # other files go to the system opener
+    opened = []
+    monkeypatch.setattr("paratext.reader.app.QDesktopServices.openUrl", staticmethod(lambda url: opened.append(url)))
+    window.links_list.setCurrentRow(1)
+    window.open_link(window.links_list.currentItem())
+    assert opened and opened[0].toLocalFile() == str(data.resolve())
+    # unlink
+    window.links_list.setCurrentRow(2)
+    window.unlink_selected()
+    assert window.links_list.count() == 2
+    assert window.links.links(window.doc.sha256)[-1].kind == "data"
