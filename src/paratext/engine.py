@@ -26,6 +26,7 @@ from paratext.glossary import (
     parse_corrections,
     parse_terms,
 )
+from paratext.links import Link, LinkStore, link_context, link_sample
 from paratext.pdf import PdfDocument
 from paratext.profile import UserProfile
 
@@ -53,11 +54,13 @@ class ContextEngine:
         audience: str = prompts.DEFAULT_AUDIENCE,
         executor: Executor | None = None,
         profile: UserProfile | None = None,
+        link_store: LinkStore | None = None,
     ):
         self.doc = doc
         self.provider = provider
         self.audience = audience
         self.profile = profile or UserProfile()
+        self.link_store = link_store
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.executor = executor or ThreadPoolExecutor(max_workers=2, thread_name_prefix="paratext")
         self._lock = threading.Lock()
@@ -300,25 +303,56 @@ class ContextEngine:
     def question_key(question: str) -> str:
         return " ".join(question.split()).lower()
 
+    def linked_files(self) -> list[Link]:
+        """Files the reader linked to this paper (SI PDFs, data, folders); they take part in questions."""
+        return self.link_store.links(self.doc.sha256) if self.link_store else []
+
+    def links_fingerprint(self) -> str:
+        """Changes when linked files or their descriptions change, so cached answers are not reused."""
+        items = sorted(f"{link.path}|{link.description}" for link in self.linked_files())
+        return hashlib.sha1("\n".join(items).encode()).hexdigest()[:10] if items else ""
+
     def cached_answer(self, question: str) -> str | None:
         key = self.question_key(question)
+        fingerprint = self.links_fingerprint()
         with self._lock:
             for q in reversed(self.questions):
-                if self.question_key(q["question"]) == key:
+                if self.question_key(q["question"]) == key and q.get("links", "") == fingerprint:
                     return q["answer"]
         return None
 
     def ask_job(self, question: str) -> str:
-        """Answer a free-form question from the whole paper's text (blocking)."""
+        """Answer a free-form question from the whole paper's text and the linked files (blocking)."""
         if self.provider is None:
             raise ProviderError("No AI provider configured.")
         text, truncated = self.doc.full_text()
-        prompt = prompts.question_prompt(text, question, self.audience, truncated)
+        linked = link_context(self.linked_files())
+        prompt = prompts.question_prompt(text, question, self.audience, truncated, linked)
         answer = self.provider.complete(self.system_prompt(), prompt).strip()
         with self._lock:
-            self.questions.append({"question": question.strip(), "answer": answer})
+            self.questions.append({"question": question.strip(), "answer": answer, "links": self.links_fingerprint()})
         self.save()
         return answer
+
+    def describe_link_job(self, link: Link) -> str:
+        """Ask the provider what a linked file contains; stores it as the link's description (blocking)."""
+        if self.provider is None:
+            raise ProviderError("No AI provider configured.")
+        prompt = prompts.describe_link_prompt(self.doc.title, link.name, link.kind, link_sample(link))
+        text = self.provider.complete(self.system_prompt(), prompt).strip()
+        if self.link_store is not None:
+            self.link_store.set_description(self.doc.sha256, link.path, text, by=self.provider.cache_key)
+        return text
+
+    def describe_link(self, link: Link, callback: Callable | None = None) -> Future | None:
+        """Describe ``link`` in the background; ``callback(link, text, error)`` when done."""
+        key = ("describe", link.path)
+        if self.provider is None or key in self._pending:
+            return None
+        self._pending.add(key)
+        future = self.executor.submit(self.describe_link_job, link)
+        future.add_done_callback(lambda f: self._finish(key, f, callback, link))
+        return future
 
     def ask(self, question: str, callback: Callable | None = None) -> Future | None:
         """Answer ``question`` about the paper; ``callback(question, answer, error)`` when done (at once if cached)."""

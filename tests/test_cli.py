@@ -98,3 +98,14 @@ def test_links(setup, capsys, tmp_path):
     assert main(["--config", config, "links", pdf, "--remove", str(si)]) == 0
     out = capsys.readouterr().out
     assert "removed" in out and "[pdf]" not in out and "[folder]" in out
+
+
+def test_links_describe_and_ask_uses_links(setup, capsys, tmp_path):
+    _, config, pdf = setup
+    csv = tmp_path / "facets.csv"
+    csv.write_text("facet\n(001)\n")
+    assert main(["--config", config, "links", pdf, "--add", str(csv), "--describe", str(csv), "Facets tested."]) == 0
+    out = capsys.readouterr().out
+    assert "described:" in out and "Facets tested. (user)" in out
+    assert main(["--config", config, "ask", pdf, "Which facet?"]) == 0
+    assert capsys.readouterr().out.strip() == "Explained in context."

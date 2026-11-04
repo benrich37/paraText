@@ -138,11 +138,20 @@ def explain_prompt(
     )
 
 
-def question_prompt(paper_text: str, question: str, audience: str, truncated: bool = False) -> str:
-    """A free-form question about the paper as a whole, answered from its full text."""
+def question_prompt(paper_text: str, question: str, audience: str, truncated: bool = False, linked: str = "") -> str:
+    """A free-form question about the paper as a whole, answered from its full text (plus linked files)."""
     note = (
         "(The paper is long, so only its first pages are included; say if the answer may lie in the rest.)\n\n"
         if truncated
+        else ""
+    )
+    linked_block = (
+        "The reader has linked these files to the paper (supporting information, data, folders). Use them where "
+        "they hold the answer, and say which file it comes from:\n"
+        "<linked_files>\n"
+        f"{linked}\n"
+        "</linked_files>\n\n"
+        if linked
         else ""
     )
     return (
@@ -150,6 +159,7 @@ def question_prompt(paper_text: str, question: str, audience: str, truncated: bo
         f"{paper_text}\n"
         "</paper>\n\n"
         f"{note}"
+        f"{linked_block}"
         "The reader asks the following question about this paper:\n"
         "<question>\n"
         f"{question}\n"
@@ -158,6 +168,18 @@ def question_prompt(paper_text: str, question: str, audience: str, truncated: bo
         "figure, table or page); where it does not, say that clearly rather than guessing. Distinguish what the "
         "paper shows from what it assumes or cites. Be concise: a short paragraph or a few sentences, or a short "
         "list if the question has several parts. Write plain text without headings or markdown."
+    )
+
+
+def describe_link_prompt(paper_title: str, name: str, kind: str, sample: str) -> str:
+    """One or two sentences saying what a linked file contains and when to consult it."""
+    return (
+        f'A reader of the paper "{paper_title}" linked the {kind} "{name}" to it. Here is a sample of it:\n'
+        "<sample>\n"
+        f"{sample}\n"
+        "</sample>\n\n"
+        "In one or two sentences, say what this file contains and when someone reading the paper should look at "
+        "it (for example which measurements, figures, structures or data it holds). Plain text, no markdown."
     )
 
 

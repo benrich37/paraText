@@ -31,6 +31,7 @@ def parse_pages(spec: str | None, page_count: int) -> list[int]:
 
 
 def _engine(args, config: Config) -> ContextEngine:
+    from paratext.links import LinkStore
     from paratext.pdf import PdfDocument
     from paratext.profile import UserProfile
 
@@ -43,6 +44,7 @@ def _engine(args, config: Config) -> ContextEngine:
         audience,
         executor=ImmediateExecutor(),
         profile=UserProfile.load(),
+        link_store=LinkStore(),
     )
 
 
@@ -121,11 +123,15 @@ def cmd_links(args, config: Config) -> int:
             print(f"linked {link.kind}: {link.path}")
         for path in args.remove or []:
             print(f"{'removed' if store.remove(doc.sha256, path) else 'not linked'}: {path}")
+        if args.describe:
+            path, text = args.describe
+            print(f"{'described' if store.set_description(doc.sha256, path, text) else 'not linked'}: {path}")
         links = store.links(doc.sha256)
         if not links:
             print(f"no files linked to {doc.title} ({store.path})")
         for link in links:
-            print(f"  [{link.kind}] {link.path}{'' if link.exists else '  (missing)'}")
+            desc = f"\n      {link.description} ({link.description_by})" if link.description else ""
+            print(f"  [{link.kind}] {link.path}{'' if link.exists else '  (missing)'}{desc}")
     finally:
         doc.close()
     return 0
@@ -242,6 +248,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--add", nargs="+", metavar="PATH", help="link these files or folders")
     p.add_argument("--kind", choices=["pdf", "data", "folder"], help="kind for --add (default: by file type)")
     p.add_argument("--remove", nargs="+", metavar="PATH", help="unlink these paths")
+    p.add_argument("--describe", nargs=2, metavar=("PATH", "TEXT"), help="say what a linked file contains")
     p.set_defaults(func=cmd_links)
 
     p = sub.add_parser("setup", help="open the AI setup dialog")

@@ -2,6 +2,21 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-04 (evening): linked files in questions, descriptions, reciprocal links (issues 5-7)
+
+- Linked files are sent with whole-paper questions as `<linked_file>` blocks after the paper, not merged into
+  it, so the model can name the source. Budget: 300k chars for the paper plus 200k shared by links, in link
+  order; a link that gets no room is listed as omitted so the model knows it exists.
+- Descriptions exist so the model knows *when* to consult a file, as the tester asked: on linking, the current
+  provider is asked for one or two sentences from a sample (PDF title + first pages, head of a text file, a
+  folder listing); the reader can overwrite it ("Describe…", stored with `description_by = "user"`). The
+  description is also part of the question-cache fingerprint, so changing it invalidates earlier answers.
+- Reciprocal PDF links are stored explicitly under the linked PDF's hash (computed at link time) rather than
+  derived at read time, so they survive renames of either file. Data files and folders have no link list of
+  their own, so those links stay one-way.
+- The back button was retracted by the tester (new windows keep the original open), so it was not built.
+- Verified with the fake provider only; no live question with a real SI has been run from this session.
+
 ## 2026-11-04 (later still): linked files (reported issue 4)
 
 - Links are user data, so they live in the config directory (`links.json`), not the cache, and are keyed by the

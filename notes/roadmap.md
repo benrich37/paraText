@@ -67,8 +67,9 @@ Ordered by priority. Update this file when you finish or discover something. Sta
 
 ## Linked files (done 2026-11-04: `links.py`, side-panel list, `paratext links`)
 
-19. Use linked SI PDFs in "Ask about the paper" (append their `full_text` under a budget) and offer their terms
-    in the glossary; show a linked PDF's page count and title in the list; drag-and-drop onto the list.
+19. *Done 2026-11-04:* linked files (with AI or user descriptions) go into "Ask about the paper". Still open:
+    offer linked-PDF terms in the glossary / explanations; show a linked PDF's title in the list; drag-and-drop
+    onto the list; for Anthropic, cache the paper + linked block across questions (prompt caching).
 
 ## Bigger ideas
 

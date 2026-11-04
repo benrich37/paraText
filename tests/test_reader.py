@@ -302,12 +302,14 @@ def test_link_files_panel(window_factory, qtbot, tmp_path, monkeypatch):
     window.link_data()
     window.link_folder()
     assert dialogs[0][1] == str(window.doc.path.parent)  # the browser starts beside the active PDF
-    assert [i.text().split(" ", 1)[1] for i in map(window.links_list.item, range(3))] == [
+    names = [i.text().split(" ", 1)[1].split(" — ")[0] for i in map(window.links_list.item, range(3))]
+    assert names == [
         "paper-SI.pdf",
         "raw.csv",
         tmp_path.name,
     ]
-    assert "Linked 1 item" in window.statusBar().currentMessage()
+    # with a synchronous executor the auto-description's status line has already replaced "Linked 1 item"
+    assert "A short explanation." in window.statusBar().currentMessage()
     # links persist per paper and come back on reopen
     assert [link.kind for link in window.links.links(window.doc.sha256)] == ["pdf", "data", "folder"]
     # a linked PDF opens in a second reader window
@@ -329,3 +331,30 @@ def test_link_files_panel(window_factory, qtbot, tmp_path, monkeypatch):
     window.unlink_selected()
     assert window.links_list.count() == 2
     assert window.links.links(window.doc.sha256)[-1].kind == "data"
+
+
+def test_linked_files_are_described_and_editable(window_factory, qtbot, tmp_path, monkeypatch):
+    provider = FakeProvider(explanation="Supplementary XRD and DFT data.")
+    window = window_factory(provider)
+    si = make_sample_pdf(tmp_path / "paper-SI.pdf", title="Supporting Information")
+    window._add_links([str(si)], "pdf")
+    qtbot.waitUntil(lambda: "Supplementary XRD" in window.links_list.item(0).text(), timeout=5000)
+    link = window.links.find(window.doc.sha256, si)
+    assert link.description_by == "fake" and 'linked the pdf "paper-SI.pdf"' in provider.calls[-1]["prompt"]
+    # the reader can overwrite the description
+    monkeypatch.setattr(
+        "paratext.reader.app.QInputDialog.getMultiLineText", staticmethod(lambda *a: ("Only the XRD.", True))
+    )
+    window.links_list.setCurrentRow(0)
+    window.describe_selected_link()
+    assert window.links.find(window.doc.sha256, si).description_by == "user"
+    assert "Only the XRD." in window.links_list.item(0).text()
+    # the SI, opened from the list, shows the main paper among its own linked files
+    window.open_link(window.links_list.item(0))
+    child = window._child_windows[0]
+    qtbot.addWidget(child)
+    assert child.links_list.count() == 1 and window.doc.path.name in child.links_list.item(0).text()
+    # a whole-paper question now carries the linked file
+    window.ask_edit.setText("Which facet?")
+    window.ask_button.click()
+    assert "<linked_files>" in provider.calls[-1]["prompt"] and "Only the XRD." in provider.calls[-1]["prompt"]

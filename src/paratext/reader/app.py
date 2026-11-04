@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -68,20 +69,21 @@ class EngineSignals(QObject):
     explained = Signal(str, object, object)  # phrase, text, error
     answered = Signal(str, object, object)  # question, answer, error
     issue_logged = Signal(object, object)  # (path, ai_problem), error
+    link_described = Signal(object, object, object)  # link, text, error
 
 
-class _IssueJob(QRunnable):
-    """Runs ``log_issue`` (which may call the provider) off the GUI thread."""
+class _CallJob(QRunnable):
+    """Runs ``fn`` off the GUI thread and emits ``signal(result, error)``."""
 
-    def __init__(self, fn, signals: EngineSignals):
+    def __init__(self, fn, signal):
         super().__init__()
-        self.fn, self.signals = fn, signals
+        self.fn, self.signal = fn, signal
 
     def run(self) -> None:
         try:
-            self.signals.issue_logged.emit(self.fn(), None)
+            self.signal.emit(self.fn(), None)
         except Exception as e:  # shown in the status bar
-            self.signals.issue_logged.emit(None, e)
+            self.signal.emit(None, e)
 
 
 class ReaderWindow(QMainWindow):
@@ -109,6 +111,7 @@ class ReaderWindow(QMainWindow):
         self._signals.explained.connect(self._on_explained)
         self._signals.answered.connect(self._on_answered)
         self._signals.issue_logged.connect(self._on_issue_logged)
+        self._signals.link_described.connect(self._on_link_described)
         self.pool = QThreadPool.globalInstance()
 
         self.setWindowTitle("paraText reader")
@@ -267,12 +270,18 @@ class ReaderWindow(QMainWindow):
         self.link_folder_button.clicked.connect(self.link_folder)
         self.open_link_button = QPushButton("Open")
         self.open_link_button.clicked.connect(lambda: self.open_link(self.links_list.currentItem()))
+        self.describe_link_button = QPushButton("Describe…")
+        self.describe_link_button.setToolTip(
+            "Say what the file contains and when the AI should look at it (questions include linked files)"
+        )
+        self.describe_link_button.clicked.connect(self.describe_selected_link)
         self.unlink_button = QPushButton("Unlink")
         self.unlink_button.clicked.connect(self.unlink_selected)
         for b in (self.link_pdf_button, self.link_data_button, self.link_folder_button):
             link_row.addWidget(b)
         link_row.addStretch(1)
         link_row.addWidget(self.open_link_button)
+        link_row.addWidget(self.describe_link_button)
         link_row.addWidget(self.unlink_button)
         layout.addLayout(link_row)
 
@@ -382,6 +391,7 @@ class ReaderWindow(QMainWindow):
             self.audience,
             executor=self._new_executor(),
             profile=self.profile,
+            link_store=self.links,
         )
         self._glossary_version += 1
         for item in self.view.items:
@@ -650,6 +660,7 @@ class ReaderWindow(QMainWindow):
             b.setEnabled(has_doc)
         selected = has_doc and self.links_list.currentItem() is not None
         self.open_link_button.setEnabled(selected)
+        self.describe_link_button.setEnabled(selected)
         self.unlink_button.setEnabled(selected)
         self.ask_edit.setEnabled(has_ai)
         self.ask_button.setEnabled(has_ai)
@@ -729,9 +740,14 @@ class ReaderWindow(QMainWindow):
             return
         icons = {"pdf": "📄", "data": "📊", "folder": "📁"}
         for link in self.links.links(self.doc.sha256):
-            item = QListWidgetItem(f"{icons.get(link.kind, '•')} {link.name}")
+            summary = f" — {link.description}" if link.description else ""
+            item = QListWidgetItem(f"{icons.get(link.kind, '•')} {link.name}{summary}")
             item.setData(Qt.ItemDataRole.UserRole, link)
-            item.setToolTip(link.path if link.exists else f"{link.path}\n(not found)")
+            tip = link.path if link.exists else f"{link.path}\n(not found)"
+            if link.description:
+                by = "your description" if link.description_by == "user" else f"described by {link.description_by}"
+                tip += f"\n\n{link.description}\n({by})"
+            item.setToolTip(tip)
             if not link.exists:
                 item.setForeground(QColor("#868e96"))
             self.links_list.addItem(item)
@@ -748,6 +764,32 @@ class ReaderWindow(QMainWindow):
         if added:
             self.links_list.setCurrentRow(self.links_list.count() - 1)
             self.statusBar().showMessage(f"Linked {len(added)} item(s) to {self.doc.title}.", 6000)
+        # let the AI say what each new file contains, so it knows when to consult it
+        if self.engine and self.engine.provider:
+            for link in added:
+                if not link.description:
+                    self.engine.describe_link(link, callback=self._signals.link_described.emit)
+
+    def _on_link_described(self, link, text, error) -> None:
+        if error:
+            self.statusBar().showMessage(f"Could not describe {link.name}: {error}")
+            return
+        self._refresh_links()
+        self.statusBar().showMessage(f"{link.name}: {text}", 10000)
+
+    def describe_selected_link(self) -> None:
+        link = self.selected_link()
+        if link is None or self.doc is None:
+            return
+        text, ok = QInputDialog.getMultiLineText(
+            self,
+            "Describe a linked file",
+            f"What does {link.name} contain, and when should the AI look at it?",
+            link.description,
+        )
+        if ok:
+            self.links.set_description(self.doc.sha256, link.path, text, by="user")
+            self._refresh_links()
 
     def link_pdf(self) -> None:
         start = self._start_dir()
@@ -794,9 +836,7 @@ class ReaderWindow(QMainWindow):
         """A second reader window (same config, provider and profile), e.g. for a linked SI PDF."""
         window = ReaderWindow(self.config, path, self.provider_name, executor=self.executor, profile=self.profile)
         self._child_windows.append(window)
-        window.destroyed.connect(
-            lambda *_: self._child_windows.remove(window) if window in self._child_windows else None
-        )
+        window.destroyed.connect(lambda *_: self._forget_child(window))
         window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         window.show()
         return window
@@ -864,7 +904,7 @@ class ReaderWindow(QMainWindow):
         provider = self.engine.provider if self.engine else None
         self.issue_edit.setEnabled(False)
         self.statusBar().showMessage("Logging the issue…")
-        self.pool.start(_IssueJob(lambda: log_issue(note, context, provider), self._signals))
+        self.pool.start(_CallJob(lambda: log_issue(note, context, provider), self._signals.issue_logged))
 
     def _on_issue_logged(self, result, error) -> None:
         self.issue_edit.setEnabled(True)

@@ -115,10 +115,15 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   with `make_provider` and writes the config. It edits a deep copy of the config; the window adopts
   `dialog.config` on accept. `reader/profile_dialog.ProfileDialog` edits the reader profile the same way
   ("About you…" in the toolbar); the window saves it and rebuilds the engine.
-- **`links.py`**: `LinkStore` keeps files linked to a paper (`Link(path, kind pdf|data|folder, label, added)`)
-  in `$PARATEXT_LINKS` or `~/.config/paratext/links.json`, keyed by `PdfDocument.sha256`. The window's
-  "Linked files" list and `paratext links` use it; `ReaderWindow.open_in_new_window` opens a linked PDF in a
-  second window kept in `_child_windows`. Tests get an isolated links file from an autouse conftest fixture.
+- **`links.py`**: `LinkStore` keeps files linked to a paper (`Link(path, kind pdf|data|folder, label, added,
+  description, description_by)`) in `$PARATEXT_LINKS` or `~/.config/paratext/links.json`, keyed by
+  `PdfDocument.sha256`. PDF links are reciprocal (the linked PDF's hash gets a link back to the paper; `remove`
+  undoes both). `link_context(links)` renders `<linked_file>` blocks for prompts (PDF text, small text files,
+  folder listings, a note for binaries; shared budget), `link_sample` a short sample for `describe_link_prompt`.
+  The engine takes `link_store=` and uses it in `ask_job` (the question cache is keyed with a fingerprint of the
+  links) and `describe_link_job` (auto-run by the window when a file is linked; "Describe…" sets a user one).
+  `ReaderWindow.open_in_new_window` opens a linked PDF in a second window kept in `_child_windows`. Tests get an
+  isolated links file from an autouse conftest fixture.
 - **`issues.py`**: the reader's "Log an issue" box. `log_issue(note, IssueContext, provider)` always appends the
   verbatim note plus context (paper, page, provider, audience, panel title) to `notes/ReportedIssues.md` (found
   through `repo_root()`: the `pyproject.toml` above the package, i.e. an editable install; else

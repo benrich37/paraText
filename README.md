@@ -18,8 +18,11 @@ Open a PDF and paraText underlines the terms on each page that your chosen audie
   The question goes to the model with the full text of the paper, and the answer says where in the paper the
   support is, or that there is none. Answers are kept per paper, and earlier questions are listed under the latest.
 - **Link files**: "Link PDF…", "Link data…" and "Link folder…" attach supporting-information PDFs, data files
-  or folders to the paper (the browser starts next to the PDF). Linked PDFs open in a second paraText window;
-  other files open with the system. Links are kept per paper in `~/.config/paratext/links.json`.
+  or folders to the paper (the browser starts next to the PDF). Linked PDFs open in a second paraText window
+  and link back to the paper; other files open with the system. When you link a file the model writes a short
+  description of what it contains ("Describe…" lets you edit it), and whole-paper questions include the linked
+  files, so "which facet was tested?" can be answered from the SI. Links are kept per paper in
+  `~/.config/paratext/links.json`.
 - **Log an issue** (the box at the bottom of the side panel) saves a note about something wrong or wanted, with
   what was open at the time, to `notes/ReportedIssues.md` in the source checkout (or `~/.config/paratext/` for a
   non-editable install). The configured model adds a title and a short write-up. The file is a to-do list for

@@ -216,3 +216,50 @@ def test_proofread_fixes_and_removes(doc, tmp_path):
     assert again.entry("limiting potential").proofread == "fake"
     # nothing to do on a page with no AI entries
     assert engine.proofread_job(1)["checked"] == 0 or True
+
+
+def test_ask_includes_linked_files_and_descriptions(doc, tmp_path):
+    from paratext.links import LinkStore
+    from paratext.testing import make_sample_pdf
+
+    store = LinkStore(tmp_path / "links.json")
+    provider = FakeProvider(explanation="See the SI.")
+    engine = make_engine(doc, tmp_path, provider, link_store=store)
+    engine.ask("Which facet?", callback=lambda *a: None)
+    assert "<linked_files>" not in provider.calls[-1]["prompt"]
+    si = make_sample_pdf(tmp_path / "si.pdf", title="Supporting Information")
+    csv = tmp_path / "facets.csv"
+    csv.write_text("facet\n(001)\n")
+    store.add(doc.sha256, si, doc_path=str(doc.path))
+    store.add(doc.sha256, csv, doc_path=str(doc.path))
+    store.set_description(doc.sha256, csv, "Which facet each test used.")
+    # the cached answer is not reused once links changed
+    assert engine.cached_answer("Which facet?") is None
+    engine.ask("Which facet?", callback=lambda *a: None)
+    prompt = provider.calls[-1]["prompt"]
+    assert "<linked_files>" in prompt and "Title: Supporting Information" in prompt
+    assert "Description: Which facet each test used.\nfacet\n(001)" in prompt
+    assert "say which file it comes from" in prompt
+    assert engine.cached_answer("which facet?") == "See the SI."
+    # the SI now links back to the paper
+    assert [
+        link.path for link in store.links(__import__("paratext.links", fromlist=["file_sha256"]).file_sha256(si))
+    ] == [str(doc.path.resolve())]
+
+
+def test_describe_link(doc, tmp_path):
+    from paratext.links import LinkStore
+    from paratext.testing import make_sample_pdf
+
+    store = LinkStore(tmp_path / "links.json")
+    provider = FakeProvider(explanation="XRD patterns and DFT adsorption geometries; see it for facets.")
+    engine = make_engine(doc, tmp_path, provider, link_store=store)
+    si = make_sample_pdf(tmp_path / "si.pdf", title="Supporting Information")
+    link = store.add(doc.sha256, si, doc_path=str(doc.path))
+    got = []
+    engine.describe_link(link, callback=lambda link, text, error: got.append((link.path, text, error)))
+    assert got == [(link.path, "XRD patterns and DFT adsorption geometries; see it for facets.", None)]
+    prompt = provider.calls[-1]["prompt"]
+    assert 'linked the pdf "si.pdf"' in prompt and "<sample>" in prompt and "Supporting Information" in prompt
+    stored = store.find(doc.sha256, si)
+    assert stored.description.startswith("XRD patterns") and stored.description_by == "fake"
