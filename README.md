@@ -15,18 +15,27 @@ Open a PDF and paraText underlines the terms on each page that your chosen audie
 - **Drag** across any words and press **Explain selection** to have that phrase explained using the surrounding
   passage.
 - **Ask about the paper as a whole** in the box under the side panel ("does this paper show that X causes Y?").
+  The box wraps and grows to four lines, then scrolls; Enter asks and Shift+Enter starts a new line.
   The question goes to the model with the full text of the paper, and the answer says where in the paper the
   support is, or that there is none. Questions and answers are kept per paper and listed in the side panel;
   click one to bring it back. Explained selections get a green double underline: hover or click to see the
   saved explanation again. Where a term sits inside an explained selection, the list lets you switch between
   the two.
-- The status bar always shows the active AI tool, model and effort.
+- **Let the AI look up cited papers and search the web** (the checkbox under the question box, off by default)
+  lets whole-paper questions and "More depth" go beyond the paper and its linked files. The model looks up the
+  works the paper cites, then the wider literature, and names every outside source. It is slower and uses more of
+  your plan. It works with Claude Code, which gets only its WebSearch and WebFetch tools for those requests, and
+  with the Anthropic API, which uses server-side web search and fetch. Answers that could search are marked 🌐.
+- The status bar always shows the active AI tool, model and effort, and whether web search is on.
+- The side panel's sections (explanation, questions, linked files) share its height: drag the handles between them.
+  Pane sizes are remembered in `~/.config/paratext/ui.ini`.
 - **Link files**: "Link PDF…", "Link data…" and "Link folder…" attach supporting-information PDFs, data files
   or folders to the paper (the browser starts next to the PDF). Linked PDFs open in a second paraText window
   and link back to the paper; other files open with the system. When you link a file the model writes a short
   description of what it contains ("Describe…" lets you edit it), and whole-paper questions include the linked
   files, so "which facet was tested?" can be answered from the SI. Links are kept per paper in
-  `~/.config/paratext/links.json`.
+  `~/.config/paratext/links.json`. They and the cached explanations follow a PDF that is edited in place, for
+  example when Preview saves highlights into it.
 - **Log an issue** (the box at the bottom of the side panel) saves a note about something wrong or wanted, with
   what was open at the time, to `notes/ReportedIssues.md` in the source checkout (or `~/.config/paratext/` for a
   non-editable install). The configured model adds a title and a short write-up. The file is a to-do list for

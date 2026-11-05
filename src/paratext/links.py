@@ -2,6 +2,8 @@
 
 Links are user data, not cache, so they live in the config directory (``$PARATEXT_LINKS`` or
 ``~/.config/paratext/links.json``), keyed by the paper's SHA-256 so they survive moving or renaming the PDF.
+Editing the PDF in place (highlights saved by Preview, say) changes the hash; :meth:`LinkStore.adopt` then moves
+the links recorded for that path and title over to the new hash.
 """
 
 from __future__ import annotations
@@ -63,15 +65,33 @@ def kind_of(path) -> str:
 
 
 class LinkStore:
-    """All links, keyed by document hash; saved on every change."""
+    """All links, keyed by document hash; saved on every change.
+
+    Every window has its own store, so each call first re-reads the file if someone else changed it: a store
+    holding an older copy must not write it back over links added elsewhere.
+    """
 
     def __init__(self, path: Path | None = None):
         self.path = Path(path or default_links_path())
         self._data: dict[str, dict] = {}
-        self._load()
+        self._stamp = None
+        self._fresh()
 
-    def _load(self) -> None:
-        if not self.path.exists():
+    def _file_stamp(self):
+        try:
+            st = self.path.stat()
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_size)
+
+    def _fresh(self) -> None:
+        """Re-read the file when it changed since this store last read or wrote it."""
+        stamp = self._file_stamp()
+        if stamp == self._stamp:
+            return
+        self._stamp = stamp
+        if stamp is None:
+            self._data = {}
             return
         try:
             raw = json.loads(self.path.read_text())
@@ -85,9 +105,51 @@ class LinkStore:
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps({"version": 1, "documents": self._data}, indent=1, ensure_ascii=False))
         os.replace(tmp, self.path)
+        self._stamp = self._file_stamp()
 
     def links(self, doc_hash: str) -> list[Link]:
+        self._fresh()
         return [Link(**item) for item in self._data.get(doc_hash, {}).get("links", [])]
+
+    def _stale_hashes(self, doc_hash: str, doc_path: str, title: str = "") -> list[str]:
+        """Entries for the file at ``doc_path`` under other hashes (it was edited since), with a matching title."""
+        return [
+            h
+            for h, entry in self._data.items()
+            if h != doc_hash
+            and entry.get("document") == doc_path
+            and (not title or not entry.get("title") or entry.get("title") == title)
+        ]
+
+    def adopt(self, doc_hash: str, doc_path, title: str = "") -> int:
+        """Move links recorded for this file under an older hash to ``doc_hash``; returns how many moved.
+
+        A PDF edited in place (Preview saves highlights into the file) gets a new hash, which used to make its
+        links disappear (reported issue, 2026-11-05). A link already under ``doc_hash`` wins over an old copy.
+        """
+        self._fresh()
+        doc_path = str(Path(doc_path).expanduser().resolve())
+        stale = self._stale_hashes(doc_hash, doc_path, title)
+        entry = self._data.get(doc_hash)
+        if entry is None and not stale:
+            return 0
+        entry = self._data.setdefault(doc_hash, {"document": doc_path, "links": []})
+        changed = entry.get("document") != doc_path or (bool(title) and entry.get("title") != title)
+        entry["document"] = doc_path
+        if title:
+            entry["title"] = title
+        have = {item.get("path") for item in entry["links"]}
+        moved = 0
+        for h in stale:
+            for item in self._data.pop(h).get("links", []):
+                if item.get("path") not in have:
+                    entry["links"].append(item)
+                    have.add(item.get("path"))
+                    moved += 1
+            changed = True
+        if changed:
+            self.save()
+        return moved
 
     def find(self, doc_hash: str, path) -> Link | None:
         path = str(Path(path).expanduser().resolve())
@@ -101,22 +163,26 @@ class LinkStore:
         doc_path: str = "",
         label: str = "",
         reciprocal: bool = True,
+        doc_title: str = "",
     ) -> Link:
         """Link ``path`` to the document; re-linking an existing path keeps its description instead of duplicating.
 
         Linking a PDF is bidirectional: the document is also linked from that PDF (found by its hash), so opening
         the supporting information shows the main paper among its linked files.
         """
+        self._fresh()
         path = str(Path(path).expanduser().resolve())
         kind = kind or kind_of(path)
         if kind not in KINDS:
             raise ValueError(f"kind must be one of {KINDS}, not {kind!r}")
         if doc_path:
             doc_path = str(Path(doc_path).expanduser().resolve())
+        previous = self.find(doc_hash, path)
         entry = self._data.setdefault(doc_hash, {"document": doc_path, "links": []})
         if doc_path:
             entry["document"] = doc_path
-        previous = self.find(doc_hash, path)
+        if doc_title:
+            entry["title"] = doc_title
         link = Link(
             path,
             kind,
@@ -134,6 +200,7 @@ class LinkStore:
         return link
 
     def remove(self, doc_hash: str, path, reciprocal: bool = True) -> bool:
+        self._fresh()
         path = str(Path(path).expanduser().resolve())
         entry = self._data.get(doc_hash)
         if not entry:
@@ -146,10 +213,14 @@ class LinkStore:
             del self._data[doc_hash]
         self.save()
         if reciprocal and removed and removed[0].get("kind") == "pdf" and doc_path and Path(path).is_file():
-            self.remove(file_sha256(path), doc_path, reciprocal=False)
+            other = file_sha256(path)
+            # the back-link may still sit under the linked PDF's hash from before it was edited
+            for h in [other, *self._stale_hashes(other, path)]:
+                self.remove(h, doc_path, reciprocal=False)
         return len(entry["links"]) != before
 
     def set_description(self, doc_hash: str, path, description: str, by: str = "user") -> bool:
+        self._fresh()
         path = str(Path(path).expanduser().resolve())
         for item in self._data.get(doc_hash, {}).get("links", []):
             if item.get("path") == path:

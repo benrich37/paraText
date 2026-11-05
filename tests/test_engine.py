@@ -272,3 +272,101 @@ def test_explained_selections_are_recorded(doc, tmp_path):
     assert engine.explained == [{"phrase": "limiting potential", "page": 0, "start": 5, "end": 6}]
     assert engine.explained_spans(0) == engine.explained and engine.explained_spans(1) == []
     assert make_engine(doc, tmp_path, FakeProvider()).explained_spans(0) == engine.explained
+
+
+def test_cache_follows_the_pdf_when_it_is_edited(tmp_path):
+    """Highlights saved into the PDF (Preview) change its hash; the glossary, answers and explanations follow."""
+    from paratext.testing import highlight_pdf
+
+    path = make_sample_pdf(tmp_path / "paper.pdf")
+    with PdfDocument(path) as doc:
+        engine = make_engine(doc, tmp_path, FakeProvider())
+        engine.ensure_page(0)
+        engine.ask("What is measured?")
+        engine.explain("limiting potential", 0, 30, 31)
+        engine.explained.append({"phrase": "no longer there", "page": 0, "start": 0, "end": 1})
+        engine.save()
+        old_cache, old_hash = engine.cache_path, doc.sha256
+    highlight_pdf(path)
+    with PdfDocument(path) as doc:
+        assert doc.sha256 != old_hash
+        provider = FakeProvider()
+        engine = make_engine(doc, tmp_path, provider)
+        assert engine.is_page_done(0) and "oxygen reduction reaction" in engine.terms
+        assert engine.cached_answer("What is measured?") == "A short explanation."
+        assert engine.cached_explanation("limiting potential", 0, False) == "A short explanation."
+        # explained spots are kept only where the same words still sit at those positions
+        assert engine.explained == [{"phrase": "limiting potential", "page": 0, "start": 30, "end": 31}]
+        assert engine.cache_path.exists() and not old_cache.exists()
+        assert old_cache.with_name(old_cache.name + ".adopted").exists()
+        assert provider.calls == []
+
+
+def test_cache_of_another_paper_at_the_same_path_is_not_adopted(tmp_path):
+    path = make_sample_pdf(tmp_path / "paper.pdf", title="First paper")
+    with PdfDocument(path) as doc:
+        engine = make_engine(doc, tmp_path, FakeProvider())
+        engine.ask("What is measured?")
+    make_sample_pdf(tmp_path / "paper.pdf", title="Second paper")  # downloaded over the first one
+    with PdfDocument(path) as doc:
+        engine = make_engine(doc, tmp_path, FakeProvider())
+        assert engine.questions == [] and engine.cached_answer("What is measured?") is None
+
+
+def test_merging_keeps_both_old_and_new_answers(tmp_path):
+    from paratext.testing import highlight_pdf
+
+    path = make_sample_pdf(tmp_path / "paper.pdf")
+    with PdfDocument(path) as doc:
+        make_engine(doc, tmp_path, FakeProvider(explanation="old answer")).ask("First question?")
+    highlight_pdf(path)
+    with PdfDocument(path) as doc:  # a new cache exists already, written before this version adopted old ones
+        engine = ContextEngine(doc, FakeProvider(explanation="new answer"), None, executor=ImmediateExecutor())
+        engine.cache_dir = tmp_path / "cache"
+        engine.ask("Second question?")
+    with PdfDocument(path) as doc:
+        engine = make_engine(doc, tmp_path, FakeProvider())
+        assert [q["question"] for q in engine.questions] == ["First question?", "Second question?"]
+
+
+def test_web_search_only_with_permission_and_a_capable_provider(doc, tmp_path):
+    from paratext.ai.prompts import WEB_RESEARCH_NOTE
+
+    provider = FakeProvider(explanation="Per Smith 2020 (doi:10.1/x), yes.", web=True)
+    engine = make_engine(doc, tmp_path, provider)
+    assert not engine.web_enabled
+    engine.ask("Is this consistent with the cited work?")
+    assert provider.calls[-1]["web"] is False and WEB_RESEARCH_NOTE not in provider.calls[-1]["prompt"]
+    engine.allow_web = True
+    assert engine.web_enabled
+    engine.ask("Is this consistent with the cited work?")  # the answer without web search is not reused
+    assert provider.calls[-1]["web"] is True and WEB_RESEARCH_NOTE in provider.calls[-1]["prompt"]
+    assert len(provider.calls) == 2 and engine.questions[-1]["web"] is True
+    assert engine.cached_answer("Is this consistent with the cited work?", web=False) is not None
+    # brief explanations stay quick; "More depth" may search
+    engine.explain("limiting potential", 0, 5, 6)
+    assert provider.calls[-1]["web"] is False
+    engine.explain("limiting potential", 0, 5, 6, detailed=True)
+    assert provider.calls[-1]["web"] is True
+    assert engine.cached_explanation("limiting potential", 0, True, web=False) is None
+    assert engine.cached_explanation("limiting potential", 0, True) == "Per Smith 2020 (doi:10.1/x), yes."
+    # a provider that cannot search is never asked to
+    plain = FakeProvider()
+    engine = make_engine(doc, tmp_path / "other", plain, allow_web=True)
+    assert not engine.web_enabled
+    engine.ask("Anything?")
+    assert plain.calls[-1]["web"] is False
+
+
+def test_more_depth_with_web_includes_the_reference_list(tmp_path):
+    from paratext.testing import SAMPLE_PAGES
+
+    refs = "References\n[1] A. Author, Oxygen reduction on metals, J. Catal. 1 (2020) 1, doi:10.1/x."
+    with PdfDocument(make_sample_pdf(tmp_path / "paper.pdf", pages=[*SAMPLE_PAGES, refs])) as doc:
+        provider = FakeProvider(web=True)
+        engine = make_engine(doc, tmp_path, provider, allow_web=True)
+        engine.explain("limiting potential", 0, 5, 6, detailed=True)
+        prompt = provider.calls[-1]["prompt"]
+        assert "<references>\nReferences\n[1] A. Author" in prompt and "doi:10.1/x" in prompt
+        engine.explain("limiting potential", 1, 1, 2)
+        assert "<references>" not in provider.calls[-1]["prompt"]

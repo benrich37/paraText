@@ -136,6 +136,15 @@ def test_test_prompt(dialog_factory, qtbot, monkeypatch):
     qtbot.waitUntil(lambda: "Success" in dialog.result_label.text(), timeout=5000)
     assert provider.calls[0]["prompt"] == "Reply with the single word OK."
     QThreadPool.globalInstance().waitForDone()
+    # the whole reply is shown: the box spans the form (a wrapped label got ~20 characters and one line, which
+    # showed only "Success! The model"), and long text grows the box, then scrolls instead of being cut off
+    box = dialog.result_label
+    assert box.text() == "Success! The model replied: OK"
+    qtbot.waitUntil(lambda: box.height() == box.height_for_lines(1))
+    assert box.width() > 300 and box.visual_lines() == 1
+    box.setText("Test failed: claude: exited with 1: " + "a long error message " * 60)
+    qtbot.waitUntil(lambda: box.visual_lines() > 6 and box.height() == box.height_for_lines(6))
+    assert box.verticalScrollBar().maximum() > 0
 
 
 def test_fetch_models(dialog_factory, qtbot, monkeypatch):

@@ -1,6 +1,6 @@
 # Roadmap and open items
 
-Ordered by priority. Update this file when you finish or discover something. Status as of 2026-11-04. Also check `ReportedIssues.md` for issues logged from the reader.
+Ordered by priority. Update this file when you finish or discover something. Status as of 2026-11-05. Also check `ReportedIssues.md` for issues logged from the reader.
 
 ## Next up (verify what exists)
 
@@ -71,6 +71,20 @@ Ordered by priority. Update this file when you finish or discover something. Sta
 19. *Done 2026-11-04:* linked files (with AI or user descriptions) go into "Ask about the paper". Still open:
     offer linked-PDF terms in the glossary / explanations; show a linked PDF's title in the list; drag-and-drop
     onto the list; for Anthropic, cache the paper + linked block across questions (prompt caching).
+    *Done 2026-11-05:* links and the AI cache follow a PDF edited in place (Preview highlights change its hash).
+    A PDF that is both moved and edited still loses them; the trailer `/ID` could cover that case.
+
+## Literature access (done 2026-11-05 for Claude Code and the Anthropic API)
+
+20. Web search for questions and "More depth", with the reader's permission (checkbox / `--web`). Still open:
+    - `codex-cli` and `gemini-cli` `web_args`: Codex may have `--search` and Gemini has a built-in
+      `google_web_search`. Both are unverified because neither CLI is installed here.
+    - OpenAI-compatible servers: OpenAI's Responses API `web_search` tool and OpenRouter's `:online` models
+      would need a different request path.
+    - A provider-independent route: paraText itself fetches metadata and abstracts for cited DOIs (Crossref,
+      OpenAlex) and puts them in the prompt, so any model can use them.
+    - Render the answer's source links (the panel shows plain text; the model sometimes writes markdown links).
+    - Show which searches and fetches ran (Claude Code's `--output-format json` lists tool use).
 
 ## Bigger ideas
 

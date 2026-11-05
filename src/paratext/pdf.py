@@ -8,6 +8,7 @@ through one lock; callers (engine workers, the GUI's render thread) may use a
 from __future__ import annotations
 
 import hashlib
+import re
 import threading
 from functools import cached_property
 from pathlib import Path
@@ -18,6 +19,12 @@ import pymupdf
 # Expand typographic ligatures (ﬁ, ﬀ, ...) so words match plain-text terms
 _WORD_FLAGS = pymupdf.TEXTFLAGS_WORDS & ~pymupdf.TEXT_PRESERVE_LIGATURES
 _TEXT_FLAGS = pymupdf.TEXTFLAGS_TEXT & ~pymupdf.TEXT_PRESERVE_LIGATURES
+#: a line that is only a reference-list heading
+_REFERENCES_HEADING = re.compile(
+    r"^[ \t]*(?:\d+\.?\s*)?(?:references(?: and notes)?|notes and references|bibliography|literature cited|works cited)"
+    r"[ \t]*:?[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 class Word(NamedTuple):
@@ -131,6 +138,16 @@ class PdfDocument:
             parts.append(chunk)
             size += len(chunk) + 2
         return "\n\n".join(parts), truncated
+
+    def references_text(self, max_chars: int = 40_000) -> str:
+        """The reference list (from the last "References"-style heading to the end), or "" if none is found."""
+        for page in range(self.page_count - 1, -1, -1):
+            text = self.page_text(page)
+            matches = list(_REFERENCES_HEADING.finditer(text))
+            if matches:
+                tail = [text[matches[-1].start() :]] + [self.page_text(p) for p in range(page + 1, self.page_count)]
+                return "\n".join(tail).strip()[:max_chars]
+        return ""
 
     def passage(self, page_no: int, start: int, end: int, radius: int = 60) -> str:
         """Words around word indices ``start..end`` (inclusive) on a page."""

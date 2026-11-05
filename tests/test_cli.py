@@ -109,3 +109,24 @@ def test_links_describe_and_ask_uses_links(setup, capsys, tmp_path):
     assert "described:" in out and "Facets tested. (user)" in out
     assert main(["--config", config, "ask", pdf, "Which facet?"]) == 0
     assert capsys.readouterr().out.strip() == "Explained in context."
+
+
+def test_ask_web(setup, capsys):
+    tmp_path, config, pdf = setup
+    # a provider without web search answers from the paper and says so
+    assert main(["--config", config, "ask", pdf, "Is it consistent with the literature?", "--web"]) == 0
+    out = capsys.readouterr()
+    assert out.out.strip() == "Explained in context." and "cannot search the web" in out.err
+    # one with web_args gets them, and the prompt says it may search
+    script = tmp_path / "web_llm.py"
+    script.write_text(
+        "import sys\nprompt = sys.stdin.read()\n"
+        "print('searched' if '--web-on' in sys.argv and 'allows you to search the web' in prompt else 'not')\n"
+    )
+    web_config = tmp_path / "web.toml"
+    command = json.dumps([sys.executable, str(script)])
+    web_config.write_text(f'[providers.w]\nkind = "command"\ncommand = {command}\nweb_args = ["--web-on"]\n')
+    assert main(["--config", str(web_config), "ask", pdf, "Agreed?", "--provider", "w", "--web"]) == 0
+    assert capsys.readouterr().out.strip() == "searched"
+    assert main(["--config", str(web_config), "ask", pdf, "Agreed?", "--provider", "w"]) == 0
+    assert capsys.readouterr().out.strip() == "not"

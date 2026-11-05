@@ -55,12 +55,15 @@ class ContextEngine:
         executor: Executor | None = None,
         profile: UserProfile | None = None,
         link_store: LinkStore | None = None,
+        allow_web: bool = False,
     ):
         self.doc = doc
         self.provider = provider
         self.audience = audience
         self.profile = profile or UserProfile()
         self.link_store = link_store
+        #: the reader's permission to search the web (cited papers, literature) in questions and "More depth"
+        self.allow_web = allow_web
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.executor = executor or ThreadPoolExecutor(max_workers=2, thread_name_prefix="paratext")
         self._lock = threading.Lock()
@@ -72,6 +75,9 @@ class ContextEngine:
         self.explained: list[dict] = []  # selections the reader asked to explain: {"phrase", "page", "start", "end"}
         self._load_cache()
         self._add_acronyms()
+        if self.link_store is not None:
+            # links recorded under the file's hash before it was edited (e.g. highlighted in Preview) move over
+            self.link_store.adopt(self.doc.sha256, self.doc.path, self.doc.title)
 
     # ------------------------------------------------------------------
     # cache
@@ -86,22 +92,88 @@ class ContextEngine:
         tag = hashlib.sha1(settings.encode()).hexdigest()[:10]
         return self.cache_dir / f"{self.doc.sha256[:16]}-{tag}.json"
 
-    def _load_cache(self) -> None:
-        path = self.cache_path
-        if not path or not path.exists():
-            return
+    @staticmethod
+    def _read_cache(path: Path) -> dict | None:
         try:
             data = json.loads(path.read_text())
         except (OSError, json.JSONDecodeError):
-            return
-        if data.get("version") != CACHE_VERSION:
-            return
+            return None
+        return data if isinstance(data, dict) and data.get("version") == CACHE_VERSION else None
+
+    def _stale_caches(self, path: Path) -> list[tuple[Path, dict]]:
+        """Caches with these settings written for this file before it was edited, oldest first.
+
+        Editing a PDF in place (highlights saved by Preview, for example) changes its hash and so the cache name;
+        a file at the same path with the same title and page count is taken to be the same paper.
+        """
+        tag = path.name.split("-", 1)[1]
+        needle = '"document": ' + json.dumps(str(self.doc.path.resolve()), ensure_ascii=False)
+        found = []
+        for other in self.cache_dir.glob(f"*-{tag}"):
+            if other == path:
+                continue
+            try:
+                with open(other, encoding="utf-8") as f:
+                    head = f.read(4096)
+            except OSError:
+                continue
+            if needle not in head:  # "document" is the second key: a cheap check before parsing
+                continue
+            data = self._read_cache(other)
+            if data is None or data.get("title", self.doc.title) != self.doc.title:
+                continue
+            if data.get("pages", self.doc.page_count) != self.doc.page_count:
+                continue
+            if any(p >= self.doc.page_count for p in data.get("processed_pages", [])):
+                continue
+            found.append((other.stat().st_mtime, other, data))
+        return [(other, data) for _, other, data in sorted(found, key=lambda t: t[0])]
+
+    def _merge_cache(self, data: dict, check_words: bool) -> None:
+        """Add one cache file's contents; later calls win for the same term or explanation."""
         # keyed by normalize_term(term): re-key on load so files written under an older rule still work
-        self.terms = {normalize_term(e.term): e for e in (GlossaryEntry(**v) for v in data.get("terms", {}).values())}
-        self.processed_pages = set(data.get("processed_pages", []))
-        self.explanations = dict(data.get("explanations", {}))
-        self.questions = [q for q in data.get("questions", []) if "question" in q and "answer" in q]
-        self.explained = [e for e in data.get("explained", []) if {"phrase", "page", "start", "end"} <= set(e)]
+        for v in data.get("terms", {}).values():
+            entry = GlossaryEntry(**v)
+            self.terms[normalize_term(entry.term)] = entry
+        self.processed_pages |= {p for p in data.get("processed_pages", []) if 0 <= p < self.doc.page_count}
+        self.explanations.update(data.get("explanations", {}))
+        seen = {(q["question"], q["answer"]) for q in self.questions}
+        for q in data.get("questions", []):
+            if "question" in q and "answer" in q and (q["question"], q["answer"]) not in seen:
+                self.questions.append(q)
+                seen.add((q["question"], q["answer"]))
+        spots = {(e["page"], e["start"], e["end"]) for e in self.explained}
+        for e in data.get("explained", []):
+            if not {"phrase", "page", "start", "end"} <= set(e) or (e["page"], e["start"], e["end"]) in spots:
+                continue
+            if check_words and not self._phrase_at(e):
+                continue  # the edit moved the words; the explanation stays reachable by selecting them again
+            self.explained.append(e)
+            spots.add((e["page"], e["start"], e["end"]))
+
+    def _phrase_at(self, e: dict) -> bool:
+        if not 0 <= e["page"] < self.doc.page_count:
+            return False
+        words = self.doc.words(e["page"])[e["start"] : e["end"] + 1]
+        return normalize_term(" ".join(w.text for w in words)) == normalize_term(e["phrase"])
+
+    def _load_cache(self) -> None:
+        path = self.cache_path
+        if not path:
+            return
+        current = self._read_cache(path) if path.exists() else None
+        stale = self._stale_caches(path) if self.cache_dir.exists() else []
+        for _, data in stale:
+            self._merge_cache(data, check_words=True)
+        if current is not None:
+            self._merge_cache(current, check_words=False)
+        if stale:
+            self.save()
+            for other, _ in stale:  # keep the old file, out of the way, rather than delete it
+                try:
+                    os.replace(other, other.with_name(other.name + ".adopted"))
+                except OSError:
+                    pass
 
     def save(self) -> None:
         path = self.cache_path
@@ -110,7 +182,9 @@ class ContextEngine:
         with self._lock:
             data = {
                 "version": CACHE_VERSION,
-                "document": str(self.doc.path),
+                "document": str(self.doc.path.resolve()),
+                "title": self.doc.title,
+                "pages": self.doc.page_count,
                 "provider": self.provider.cache_key if self.provider else None,
                 "audience": self.audience,
                 "reader_profile": self.profile.to_prompt(),
@@ -259,22 +333,45 @@ class ContextEngine:
     # explanations of arbitrary phrases
     # ------------------------------------------------------------------
 
+    @property
+    def web_enabled(self) -> bool:
+        """The reader allows web search and the provider can do it (Claude Code, the Anthropic API)."""
+        return bool(self.allow_web and self.provider is not None and getattr(self.provider, "supports_web", False))
+
+    def _complete(self, prompt: str, web: bool = False) -> str:
+        if web:
+            return self.provider.complete(self.system_prompt(), prompt, web=True).strip()
+        return self.provider.complete(self.system_prompt(), prompt).strip()
+
     @staticmethod
-    def explanation_key(phrase: str, page: int, detailed: bool) -> str:
-        return f"{'detailed' if detailed else 'brief'}|{page}|{normalize_term(phrase)}"
+    def explanation_key(phrase: str, page: int, detailed: bool, web: bool = False) -> str:
+        kind = ("detailed" if detailed else "brief") + ("+web" if web else "")
+        return f"{kind}|{page}|{normalize_term(phrase)}"
 
-    def cached_explanation(self, phrase: str, page: int, detailed: bool) -> str | None:
-        return self.explanations.get(self.explanation_key(phrase, page, detailed))
+    def cached_explanation(self, phrase: str, page: int, detailed: bool, web: bool | None = None) -> str | None:
+        """The cached explanation; ``web=None`` takes either kind, preferring one written with web search."""
+        if web is None:
+            return self.cached_explanation(phrase, page, detailed, True) or self.cached_explanation(
+                phrase, page, detailed, False
+            )
+        return self.explanations.get(self.explanation_key(phrase, page, detailed, web))
 
-    def explain_job(self, phrase: str, page: int, start: int, end: int, detailed: bool) -> str:
+    def explain_job(self, phrase: str, page: int, start: int, end: int, detailed: bool, web: bool = False) -> str:
         if self.provider is None:
             raise ProviderError("No AI provider configured.")
         prompt = prompts.explain_prompt(
-            self.doc.paper_context(), phrase, self.doc.passage(page, start, end), page + 1, self.audience, detailed
+            self.doc.paper_context(),
+            phrase,
+            self.doc.passage(page, start, end),
+            page + 1,
+            self.audience,
+            detailed,
+            references=self.doc.references_text() if web else "",
+            web=web,
         )
-        text = self.provider.complete(self.system_prompt(), prompt).strip()
+        text = self._complete(prompt, web)
         with self._lock:
-            self.explanations[self.explanation_key(phrase, page, detailed)] = text
+            self.explanations[self.explanation_key(phrase, page, detailed, web)] = text
             if not any(e["page"] == page and e["start"] == start and e["end"] == end for e in self.explained):
                 self.explained.append({"phrase": phrase, "page": page, "start": start, "end": end})
         self.save()
@@ -290,18 +387,20 @@ class ContextEngine:
     ) -> Future | None:
         """Explain ``phrase`` (page words ``start..end``) in context.
 
-        ``callback(phrase, text, error)`` is called when done (immediately if cached).
+        ``callback(phrase, text, error)`` is called when done (immediately if cached). Only "More depth"
+        (``detailed``) may search the web, and only when :attr:`web_enabled`.
         """
-        cached = self.cached_explanation(phrase, page, detailed)
+        web = detailed and self.web_enabled
+        cached = self.cached_explanation(phrase, page, detailed, web)
         if cached is not None:
             if callback:
                 callback(phrase, cached, None)
             return None
-        key = ("explain", self.explanation_key(phrase, page, detailed))
+        key = ("explain", self.explanation_key(phrase, page, detailed, web))
         if key in self._pending:
             return None
         self._pending.add(key)
-        future = self.executor.submit(self.explain_job, phrase, page, start, end, detailed)
+        future = self.executor.submit(self.explain_job, phrase, page, start, end, detailed, web)
         future.add_done_callback(lambda f: self._finish(key, f, callback, phrase))
         return future
 
@@ -322,25 +421,41 @@ class ContextEngine:
         items = sorted(f"{link.path}|{link.description}" for link in self.linked_files())
         return hashlib.sha1("\n".join(items).encode()).hexdigest()[:10] if items else ""
 
-    def cached_answer(self, question: str) -> str | None:
+    def cached_answer(self, question: str, web: bool | None = None) -> str | None:
+        """An earlier answer to the same question with the same linked files and web permission."""
+        record = self.question_record(question, web)
+        return record["answer"] if record else None
+
+    def question_record(self, question: str, web: bool | None = None) -> dict | None:
         key = self.question_key(question)
         fingerprint = self.links_fingerprint()
+        web = self.web_enabled if web is None else web
         with self._lock:
             for q in reversed(self.questions):
-                if self.question_key(q["question"]) == key and q.get("links", "") == fingerprint:
-                    return q["answer"]
+                if (
+                    self.question_key(q["question"]) == key
+                    and q.get("links", "") == fingerprint
+                    and bool(q.get("web")) == web
+                ):
+                    return q
         return None
 
-    def ask_job(self, question: str) -> str:
-        """Answer a free-form question from the whole paper's text and the linked files (blocking)."""
+    def ask_job(self, question: str, web: bool = False) -> str:
+        """Answer a free-form question from the whole paper's text and the linked files (blocking).
+
+        With ``web``, the provider may also look up the papers this one cites and search the literature.
+        """
         if self.provider is None:
             raise ProviderError("No AI provider configured.")
         text, truncated = self.doc.full_text()
         linked = link_context(self.linked_files())
-        prompt = prompts.question_prompt(text, question, self.audience, truncated, linked)
-        answer = self.provider.complete(self.system_prompt(), prompt).strip()
+        prompt = prompts.question_prompt(text, question, self.audience, truncated, linked, web=web)
+        answer = self._complete(prompt, web)
+        record = {"question": question.strip(), "answer": answer, "links": self.links_fingerprint()}
+        if web:
+            record["web"] = True
         with self._lock:
-            self.questions.append({"question": question.strip(), "answer": answer, "links": self.links_fingerprint()})
+            self.questions.append(record)
         self.save()
         return answer
 
@@ -367,16 +482,17 @@ class ContextEngine:
     def ask(self, question: str, callback: Callable | None = None) -> Future | None:
         """Answer ``question`` about the paper; ``callback(question, answer, error)`` when done (at once if cached)."""
         question = question.strip()
-        cached = self.cached_answer(question)
+        web = self.web_enabled
+        cached = self.cached_answer(question, web)
         if cached is not None:
             if callback:
                 callback(question, cached, None)
             return None
-        key = ("ask", self.question_key(question))
+        key = ("ask", self.question_key(question), web)
         if key in self._pending:
             return None
         self._pending.add(key)
-        future = self.executor.submit(self.ask_job, question)
+        future = self.executor.submit(self.ask_job, question, web)
         future.add_done_callback(lambda f: self._finish(key, f, callback, question))
         return future
 

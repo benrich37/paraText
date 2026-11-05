@@ -150,7 +150,7 @@ def test_anthropic_request_shape(monkeypatch):
     pytest.importorskip("anthropic")
     client, messages = stub_client(text_response('{"terms": []}'))
     p = AnthropicProvider()
-    monkeypatch.setattr(p, "_client", lambda anthropic: client)
+    monkeypatch.setattr(p, "_client", lambda anthropic, timeout=None: client)
     assert p.complete("sys", "prompt", json_schema={"type": "object"}) == '{"terms": []}'
     kw = messages.kwargs
     assert kw["model"] == "claude-opus-5-5"
@@ -166,7 +166,7 @@ def test_anthropic_no_fallback_for_other_models(monkeypatch):
     pytest.importorskip("anthropic")
     client, messages = stub_client(text_response("ok"))
     p = AnthropicProvider(model="claude-haiku-5-5", effort="")
-    monkeypatch.setattr(p, "_client", lambda anthropic: client)
+    monkeypatch.setattr(p, "_client", lambda anthropic, timeout=None: client)
     p.complete("sys", "prompt")
     assert "fallbacks" not in messages.kwargs and "betas" not in messages.kwargs
     assert "output_config" not in messages.kwargs
@@ -176,7 +176,7 @@ def test_anthropic_refusal_raises(monkeypatch):
     pytest.importorskip("anthropic")
     client, _ = stub_client(text_response("", stop_reason="refusal"))
     p = AnthropicProvider()
-    monkeypatch.setattr(p, "_client", lambda anthropic: client)
+    monkeypatch.setattr(p, "_client", lambda anthropic, timeout=None: client)
     with pytest.raises(ProviderError, match="declined.*cyber"):
         p.complete("sys", "prompt")
 
@@ -364,3 +364,66 @@ def test_provider_summaries():
     assert make_provider("openai", {"preset": "openai", "model": "o3", "effort": "high", "api_key": "k"}).summary == (
         "o3, effort high"
     )
+
+
+# --------------------------------------------------------------------------
+# Web search (the reader's permission): which providers can, and how they are asked
+# --------------------------------------------------------------------------
+
+
+def test_web_search_support_by_provider():
+    claude = make_provider("claude-cli", {"preset": "claude-cli", "model": "opus"})
+    assert claude.supports_web and AnthropicProvider().supports_web
+    assert not make_provider("codex-cli").supports_web and not make_provider("gemini-cli").supports_web
+    assert not make_provider("ollama", {"preset": "ollama", "model": "m"}).supports_web
+    with pytest.raises(ProviderError, match="web search is not available"):
+        make_provider("ollama", {"preset": "ollama", "model": "m"}).complete("s", "p", web=True)
+    # the web flags are not part of the cache key: the engine keys web answers itself
+    assert "WebSearch" not in claude.cache_key
+
+
+def test_command_web_args_only_with_permission():
+    show_args = [sys.executable, "-c", "import sys; sys.stdin.read(); print(' '.join(sys.argv[1:]))"]
+    p = CommandProvider(command=show_args, web_args=["--tools", "WebSearch,WebFetch"], web_timeout=60)
+    assert p.complete("s", "p").strip() == ""
+    assert p.complete("s", "p", web=True).strip() == "--tools WebSearch,WebFetch"
+    assert make_provider("claude-cli").web_args == [
+        "--tools",
+        "WebSearch,WebFetch",
+        "--allowedTools",
+        "WebSearch,WebFetch",
+    ]
+
+
+def test_anthropic_web_tools_and_pause_turn(monkeypatch):
+    pytest.importorskip("anthropic")
+    paused = SimpleNamespace(
+        stop_reason="pause_turn",
+        stop_details=None,
+        content=[SimpleNamespace(type="text", text="Searching. "), SimpleNamespace(type="server_tool_use")],
+    )
+    responses = [paused, text_response("Per Smith 2020, yes.")]
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        return responses[len(calls) - 1]
+
+    client = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
+    timeouts = []
+    p = AnthropicProvider()
+    monkeypatch.setattr(p, "_client", lambda anthropic, timeout=None: timeouts.append(timeout) or client)
+    assert p.complete("sys", "question", web=True) == "Searching. Per Smith 2020, yes."
+    assert timeouts == [p.web_timeout]
+    assert [t["type"] for t in calls[0]["tools"]] == ["web_search_20260209", "web_fetch_20260209"]
+    assert calls[0]["tools"][0]["max_uses"] == 5
+    # the paused turn is sent back as it is, with no extra "continue" message
+    assert calls[1]["messages"] == [
+        {"role": "user", "content": "question"},
+        {"role": "assistant", "content": paused.content},
+    ]
+    # without permission: no tools
+    client2, messages = stub_client(text_response("ok"))
+    monkeypatch.setattr(p, "_client", lambda anthropic, timeout=None: client2)
+    p.complete("sys", "question")
+    assert "tools" not in messages.kwargs

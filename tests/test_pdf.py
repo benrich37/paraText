@@ -59,3 +59,15 @@ def test_full_text_wraps_pages_and_truncates(tmp_path):
     short, truncated = doc.full_text(max_chars=10)
     assert truncated and short.count("<page number=") == 1  # at least the first page is always included
     doc.close()
+
+
+def test_references_text(tmp_path):
+    from paratext.testing import SAMPLE_PAGES, make_sample_pdf
+
+    refs = "Acknowledgements. Thanks.\nReferences\n[1] A. Author, A title, J. 1 (2020) 1."
+    with PdfDocument(make_sample_pdf(tmp_path / "a.pdf", pages=[*SAMPLE_PAGES, refs, "[2] B. Author, More."])) as d:
+        text = d.references_text()
+        assert text.startswith("References\n[1] A. Author") and "[2] B. Author" in text
+        assert "Thanks" not in text and len(d.references_text(max_chars=20)) == 20
+    with PdfDocument(make_sample_pdf(tmp_path / "b.pdf")) as d:
+        assert d.references_text() == ""  # "references" inside a sentence is not a heading

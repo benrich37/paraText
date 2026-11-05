@@ -115,8 +115,26 @@ def proofread_prompt(
     )
 
 
+#: added to a prompt when the reader allows web search (the provider then has search and fetch tools)
+WEB_RESEARCH_NOTE = (
+    "The reader allows you to search the web. Use the paper (and any linked files) first. Where they do not settle "
+    "it, or a cited work holds the detail, look up the works this paper cites (find them in its reference list "
+    "and search by DOI or title), then the wider literature if needed. Keep searches few and focused. "
+    "Say which statements come from outside this paper, and name each outside source after the statement it "
+    "supports (authors, year, title, and DOI or URL). If you could not reach a source, say so instead of guessing "
+    "what it says."
+)
+
+
 def explain_prompt(
-    paper_context: str, phrase: str, passage: str, page_number: int, audience: str, detailed: bool
+    paper_context: str,
+    phrase: str,
+    passage: str,
+    page_number: int,
+    audience: str,
+    detailed: bool,
+    references: str = "",
+    web: bool = False,
 ) -> str:
     if detailed:
         depth = (
@@ -125,20 +143,26 @@ def explain_prompt(
         )
     else:
         depth = "Answer in 1 to 3 sentences."
+    refs = f"<references>\n{references}\n</references>\n\n" if references else ""
+    research = f"{WEB_RESEARCH_NOTE}\n\n" if web else ""
     return (
         "<paper_context>\n"
         f"{paper_context}\n"
         "</paper_context>\n\n"
+        f"{refs}"
         f'The reader highlighted "{phrase}" on page {page_number}, in this passage:\n'
         "<passage>\n"
         f"{passage}\n"
         "</passage>\n\n"
+        f"{research}"
         f'Explain what "{phrase}" means here, for {audience}. {depth} '
         "Write plain text without headings or markdown."
     )
 
 
-def question_prompt(paper_text: str, question: str, audience: str, truncated: bool = False, linked: str = "") -> str:
+def question_prompt(
+    paper_text: str, question: str, audience: str, truncated: bool = False, linked: str = "", web: bool = False
+) -> str:
     """A free-form question about the paper as a whole, answered from its full text (plus linked files)."""
     note = (
         "(The paper is long, so only its first pages are included; say if the answer may lie in the rest.)\n\n"
@@ -154,6 +178,7 @@ def question_prompt(paper_text: str, question: str, audience: str, truncated: bo
         if linked
         else ""
     )
+    research = f"{WEB_RESEARCH_NOTE}\n\n" if web else ""
     return (
         "<paper>\n"
         f"{paper_text}\n"
@@ -164,6 +189,7 @@ def question_prompt(paper_text: str, question: str, audience: str, truncated: bo
         "<question>\n"
         f"{question}\n"
         "</question>\n\n"
+        f"{research}"
         f"Answer for {audience}, using the paper's own text. Where the paper supports a claim, say where (section, "
         "figure, table or page); where it does not, say that clearly rather than guessing. Distinguish what the "
         "paper shows from what it assumes or cites. Be concise: a short paragraph or a few sentences, or a short "

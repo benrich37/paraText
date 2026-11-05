@@ -43,6 +43,21 @@ SAMPLE_PAGES = [
 ]
 
 
+def highlight_pdf(path, page: int = 0):
+    """Edit a PDF in place the way Preview does when you highlight: add an annotation, save incrementally.
+
+    The text is unchanged but the file's bytes (and so its SHA-256) are not.
+    """
+    import pymupdf
+
+    doc = pymupdf.open(path)
+    target = doc[page]
+    target.add_highlight_annot(pymupdf.Rect(30, 30, 200, 50))
+    doc.saveIncr()
+    doc.close()
+    return path
+
+
 def make_sample_pdf(path, pages=None, title="A Study of Catalysis"):
     """Write a small text PDF (one textbox per page) and return its path."""
     import pymupdf
@@ -69,11 +84,16 @@ class FakeProvider:
 
     name = "fake"
 
-    def __init__(self, glossary=None, explanation="A short explanation.", error=None):
+    def __init__(self, glossary=None, explanation="A short explanation.", error=None, web=False):
         self.glossary = SAMPLE_GLOSSARY if glossary is None else glossary
         self.explanation = explanation
         self.error = error
+        self.web = web  # whether it claims web search, like claude-cli and anthropic
         self.calls = []
+
+    @property
+    def supports_web(self):
+        return self.web
 
     @property
     def cache_key(self):
@@ -83,11 +103,13 @@ class FakeProvider:
     def summary(self):
         return "fake model"
 
-    def complete(self, system, prompt, json_schema=None):
+    def complete(self, system, prompt, json_schema=None, web=False):
         import json
         import re
 
-        self.calls.append({"system": system, "prompt": prompt, "json_schema": json_schema})
+        if web and not self.web:
+            raise AssertionError("web=True sent to a provider without web search")
+        self.calls.append({"system": system, "prompt": prompt, "json_schema": json_schema, "web": web})
         if self.error is not None:
             raise self.error
         if json_schema is None:

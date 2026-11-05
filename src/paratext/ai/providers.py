@@ -35,7 +35,7 @@ class Provider:
     #: human-readable identifier, also part of the cache key
     name: str = "provider"
 
-    def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
+    def complete(self, system: str, prompt: str, json_schema: dict | None = None, web: bool = False) -> str:
         """Return the model's text reply.
 
         :param system: system / instruction prompt
@@ -43,8 +43,19 @@ class Provider:
         :param json_schema: if given, the caller expects a JSON object matching
             this schema.  Backends that support constrained output use it;
             others rely on the prompt asking for JSON.
+        :param web: let the model search the web and fetch pages for this request (the reader's
+            permission); only providers with :attr:`supports_web` accept it.
         """
         raise NotImplementedError
+
+    @property
+    def supports_web(self) -> bool:
+        """Whether ``complete(..., web=True)`` gives the model web search and page fetching."""
+        return False
+
+    def _check_web(self, web: bool) -> None:
+        if web and not self.supports_web:
+            raise ProviderError(f"{self.name}: web search is not available with this provider.")
 
     @property
     def cache_key(self) -> str:
@@ -95,7 +106,8 @@ class OpenAICompatibleProvider(Provider):
     def summary(self) -> str:
         return self.model + (f", effort {self.effort}" if self.effort else "")
 
-    def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
+    def complete(self, system: str, prompt: str, json_schema: dict | None = None, web: bool = False) -> str:
+        self._check_web(web)
         key = _resolve_api_key(self.api_key, self.api_key_env, required=self.api_key_env is not None)
         body = {
             "model": self.model,
@@ -143,6 +155,10 @@ class AnthropicProvider(Provider):
     #: None means "on for models that support it"
     refusal_fallback: bool | None = None
     timeout: float = 120.0
+    #: per-request timeout when web search is on (the server runs several searches and fetches per request)
+    web_timeout: float = 600.0
+    #: cap on web searches per request
+    web_max_searches: int = 5
     name: str = "anthropic"
 
     @property
@@ -153,20 +169,34 @@ class AnthropicProvider(Provider):
     def summary(self) -> str:
         return f"{self.model}, effort {self.effort or 'default'}"
 
-    def _client(self, anthropic):
+    @property
+    def supports_web(self) -> bool:
+        return True
+
+    def _client(self, anthropic, timeout: float | None = None):
         key = _resolve_api_key(self.api_key, self.api_key_env, required=self.api_key_env is not None)
+        timeout = timeout or self.timeout
         # With no explicit key the SDK resolves ANTHROPIC_API_KEY / an `ant auth login` profile itself.
         if key:
-            return anthropic.Anthropic(api_key=key, timeout=self.timeout)
-        return anthropic.Anthropic(timeout=self.timeout)
+            return anthropic.Anthropic(api_key=key, timeout=timeout)
+        return anthropic.Anthropic(timeout=timeout)
 
-    def request_kwargs(self, system: str, prompt: str, json_schema: dict | None = None) -> dict:
+    def web_tools(self) -> list[dict]:
+        """Server-side web search and fetch (run by Anthropic; nothing to execute here)."""
+        return [
+            {"type": "web_search_20260209", "name": "web_search", "max_uses": self.web_max_searches},
+            {"type": "web_fetch_20260209", "name": "web_fetch"},
+        ]
+
+    def request_kwargs(self, system: str, prompt: str, json_schema: dict | None = None, web: bool = False) -> dict:
         kwargs = dict(
             model=self.model,
             max_tokens=self.max_tokens,
             system=system,
             messages=[{"role": "user", "content": prompt}],
         )
+        if web:
+            kwargs["tools"] = self.web_tools()
         output_config = {}
         if self.effort:
             output_config["effort"] = self.effort
@@ -180,23 +210,34 @@ class AnthropicProvider(Provider):
             kwargs["fallbacks"] = "default"
         return kwargs
 
-    def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
+    #: how many times a web request paused by the server-side tool loop is resumed
+    MAX_CONTINUATIONS = 5
+
+    def complete(self, system: str, prompt: str, json_schema: dict | None = None, web: bool = False) -> str:
         try:
             import anthropic
         except ImportError as e:
             raise ProviderError("The Anthropic provider needs the SDK: pip install 'paratext[anthropic]'") from e
-        client = self._client(anthropic)
-        try:
-            response = client.beta.messages.create(**self.request_kwargs(system, prompt, json_schema))
-        except anthropic.AuthenticationError as e:
-            raise ProviderError("anthropic: authentication failed; check ANTHROPIC_API_KEY.") from e
-        except anthropic.APIError as e:
-            raise ProviderError(f"anthropic: {e}") from e
-        if response.stop_reason == "refusal":
-            details = getattr(response, "stop_details", None)
-            category = getattr(details, "category", None) if details else None
-            raise ProviderError(f"anthropic: the model declined this request (category: {category}).")
-        return "".join(block.text for block in response.content if block.type == "text")
+        client = self._client(anthropic, self.web_timeout if web else None)
+        kwargs = self.request_kwargs(system, prompt, json_schema, web)
+        texts = []
+        for _ in range(self.MAX_CONTINUATIONS + 1):
+            try:
+                response = client.beta.messages.create(**kwargs)
+            except anthropic.AuthenticationError as e:
+                raise ProviderError("anthropic: authentication failed; check ANTHROPIC_API_KEY.") from e
+            except anthropic.APIError as e:
+                raise ProviderError(f"anthropic: {e}") from e
+            if response.stop_reason == "refusal":
+                details = getattr(response, "stop_details", None)
+                category = getattr(details, "category", None) if details else None
+                raise ProviderError(f"anthropic: the model declined this request (category: {category}).")
+            texts.append("".join(block.text for block in response.content if block.type == "text"))
+            if response.stop_reason != "pause_turn":
+                break
+            # the server-side search loop hit its iteration limit: send the turn back and it carries on
+            kwargs["messages"] = [kwargs["messages"][0], {"role": "assistant", "content": response.content}]
+        return "".join(texts)
 
 
 @dataclass
@@ -211,7 +252,11 @@ class CommandProvider(Provider):
     #: effort level, inserted into ``effort_args`` (e.g. ``["--effort", "{effort}"]``) when non-empty
     effort: str = ""
     effort_args: list[str] = field(default_factory=list)
+    #: added when the reader allows web search, e.g. Claude Code's ``--tools WebSearch,WebFetch --allowedTools …``
+    web_args: list[str] = field(default_factory=list)
     timeout: float = 300.0
+    #: timeout when web search is on (searching and reading cited papers takes a while)
+    web_timeout: float = 900.0
     name: str = "command"
 
     def __post_init__(self):
@@ -237,6 +282,10 @@ class CommandProvider(Provider):
             parts.append(f"effort {self.effort or 'default'}")
         return f"{self.command[0]}: " + ", ".join(parts)
 
+    @property
+    def supports_web(self) -> bool:
+        return bool(self.web_args)
+
     def full_command(self) -> list[str]:
         """The command with the model flag filled in."""
         args = list(self.command)
@@ -246,21 +295,24 @@ class CommandProvider(Provider):
             args += [a.format(effort=self.effort) for a in self.effort_args]
         return args
 
-    def complete(self, system: str, prompt: str, json_schema: dict | None = None) -> str:
+    def complete(self, system: str, prompt: str, json_schema: dict | None = None, web: bool = False) -> str:
+        self._check_web(web)
         full_prompt = f"{system}\n\n{prompt}"
-        args = self.full_command() + ([full_prompt] if self.prompt_via == "arg" else [])
+        args = self.full_command() + (list(self.web_args) if web else [])
+        args += [full_prompt] if self.prompt_via == "arg" else []
+        timeout = self.web_timeout if web else self.timeout
         try:
             result = subprocess.run(
                 args,
                 input=full_prompt if self.prompt_via == "stdin" else None,
                 capture_output=True,
                 text=True,
-                timeout=self.timeout,
+                timeout=timeout,
             )
         except FileNotFoundError as e:
             raise ProviderError(f"{self.name}: command not found: {self.command[0]}") from e
         except subprocess.TimeoutExpired as e:
-            raise ProviderError(f"{self.name}: timed out after {self.timeout:.0f}s") from e
+            raise ProviderError(f"{self.name}: timed out after {timeout:.0f}s") from e
         if result.returncode != 0:
             raise ProviderError(f"{self.name}: exited with {result.returncode}: {result.stderr.strip()[:500]}")
         return result.stdout
@@ -289,6 +341,8 @@ PRESETS: dict[str, dict] = {
         "command": ["claude", "-p"],
         "model_args": ["--model", "{model}"],
         "effort_args": ["--effort", "{effort}"],
+        # only web search and page fetching, pre-approved: `-p` denies tools that would ask (checked 2026-11-05)
+        "web_args": ["--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch"],
     },
     "codex-cli": {"kind": "command", "command": ["codex", "exec", "-"], "model_args": ["-m", "{model}"]},
     "gemini-cli": {"kind": "command", "command": ["gemini"], "model_args": ["-m", "{model}"]},

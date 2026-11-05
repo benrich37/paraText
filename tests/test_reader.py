@@ -452,3 +452,68 @@ def test_windows_share_config_and_never_write_stale_settings(window_factory, qtb
     on_disk = Config.load(config.path)
     assert on_disk.audience == "a chemist" and on_disk.providers["claude-cli"]["effort"] == "low"
     assert child.config.providers["claude-cli"]["model"] == "fable"
+
+
+def test_side_panel_sections_are_resizable_and_remembered(window_factory, tmp_path):
+    window = window_factory(FakeProvider())
+    splitter = window.side_splitter
+    assert splitter.orientation() == Qt.Orientation.Vertical and splitter.count() == 3
+    assert splitter.widget(0).isAncestorOf(window.panel_text)
+    assert splitter.widget(1).isAncestorOf(window.history_list)
+    assert splitter.widget(2).isAncestorOf(window.links_list)
+    assert window.history_list.maximumHeight() > 10_000  # no fixed cap: the handle decides
+    total = sum(splitter.sizes())
+    splitter.setSizes([total - 300, 180, 120])
+    wanted, main = splitter.sizes(), window.splitter.sizes()
+    window.close()
+    assert (tmp_path / "ui.ini").exists()
+    again = window_factory(FakeProvider())
+    assert again.side_splitter.sizes() == wanted and again.splitter.sizes() == main
+
+
+def test_question_and_issue_boxes_wrap_and_grow(window_factory, qtbot):
+    from paratext.reader.textbox import GrowingTextEdit
+
+    window = window_factory(FakeProvider(explanation="An answer."))
+    assert isinstance(window.issue_edit, GrowingTextEdit)
+    box = window.ask_edit
+    one_line = box.height()
+    assert box.visual_lines() == 1 and one_line == box.height_for_lines(1)
+    box.setText("does the paper show that the catalyst is stable " * 2)
+    qtbot.waitUntil(lambda: 1 < box.visual_lines() <= 4 and box.height() == box.height_for_lines(box.visual_lines()))
+    assert box.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    box.setText("does the paper show that the catalyst is stable " * 12)
+    qtbot.waitUntil(lambda: box.visual_lines() > 4 and box.height() == box.height_for_lines(4))
+    assert box.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded
+    assert box.verticalScrollBar().maximum() > 0 and box.horizontalScrollBar().maximum() == 0
+    # Shift+Enter starts a new line, Enter asks
+    box.clear()
+    qtbot.waitUntil(lambda: box.height() == one_line)
+    QTest.keyClicks(box, "First part?")
+    QTest.keyClick(box, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)
+    QTest.keyClicks(box, "Second part?")
+    assert box.text() == "First part?\nSecond part?"
+    QTest.keyClick(box, Qt.Key.Key_Return)
+    assert window.panel_title.text() == "First part?\nSecond part?" and window.panel_body() == "An answer."
+    assert box.text() == ""
+
+
+def test_web_search_permission(window_factory, tmp_path):
+    from paratext.ai.prompts import WEB_RESEARCH_NOTE
+
+    window = window_factory(FakeProvider())
+    assert not window.web_check.isEnabled() and "cannot search the web" in window.web_check.toolTip()
+    provider = FakeProvider(explanation="Smith 2020 (doi:10.1/x) agrees.", web=True)
+    window = window_factory(provider)
+    assert window.web_check.isEnabled() and not window.web_check.isChecked()
+    window.web_check.setChecked(True)
+    assert window.engine.allow_web and Config.load(tmp_path / "config.toml").allow_web
+    assert "web search on" in window.ai_label.text()
+    window.ask_edit.setText("Do the cited works agree?")
+    window.ask_button.click()
+    assert provider.calls[-1]["web"] is True and WEB_RESEARCH_NOTE in provider.calls[-1]["prompt"]
+    assert "web search was allowed" in window.panel_footer.text()
+    assert window.history_list.item(0).text() == "Q: Do the cited works agree?  🌐"
+    window.web_check.setChecked(False)
+    assert not window.engine.allow_web and not Config.load(tmp_path / "config.toml").allow_web
+    assert "web search" not in window.ai_label.text()

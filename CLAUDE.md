@@ -27,7 +27,7 @@ ruff check . && ruff format .              # line length 120; rules pinned in py
 paratext read paper.pdf [--provider NAME]  # GUI
 paratext setup                             # just the AI setup dialog
 paratext glossary paper.pdf --provider none --json   # headless; `none` = offline (acronyms only)
-paratext ask paper.pdf "question"          # whole-paper question (full text in the prompt), headless
+paratext ask paper.pdf "question" [--web]  # whole-paper question (full text in the prompt), headless
 paratext providers [--check]               # readiness of every provider (+ a test prompt for configured ones)
 paratext install-app                       # macOS: write ~/Applications/paraText.app (Finder "Open With" for PDFs)
 ```
@@ -47,6 +47,7 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   interleaves two-column layouts. Ligatures are expanded at extraction. Coordinates are PDF points from the top-left.
   PyMuPDF is not thread-safe, so every `_doc` access takes `self._lock`; the GUI's render thread and the engine's
   workers share one document. `render(page, scale)` returns raw RGB for Qt; `render_png` is for scripts.
+  `references_text()` returns the reference list (last "References"-style heading line to the end).
 - **`glossary.py`**:
   - `parse_terms` reads model JSON robustly (code fences, prose around it).
   - `extract_acronyms` finds "long form (ACR)" definitions offline.
@@ -78,8 +79,17 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   for OpenAI-compatible servers; subscription CLIs take a model through the preset's `model_args`
   (`claude -p --model X`, `codex exec -m X`, `gemini -m X`; flags unverified live). Model and effort are part of
   `cache_key`.
+
+  Web search is the reader's permission, per request: `complete(..., web=True)` on providers whose
+  `supports_web` is true, otherwise `ProviderError`. `CommandProvider` appends `web_args` and uses `web_timeout`.
+  claude-cli's are `--tools WebSearch,WebFetch --allowedTools WebSearch,WebFetch`; `-p` denies tools that would
+  prompt, so without them nothing is searched (checked live 2026-11-05). `AnthropicProvider` adds the server tools
+  `web_search_20260209` (`max_uses` = `web_max_searches`) and `web_fetch_20260209`, and resumes `pause_turn` up to
+  `MAX_CONTINUATIONS` times by sending the paused content back. codex/gemini have no `web_args` (unverified).
+  `web_args` is not in `cache_key`; the engine keys web answers itself.
 - **`ai/prompts.py`**: all prompt text plus `PROMPT_VERSION`. Bump it when the wording changes; it is part of the
-  cache key. `system_prompt(audience, reader_profile)` appends the profile paragraph.
+  cache key. `system_prompt(audience, reader_profile)` appends the profile paragraph. `WEB_RESEARCH_NOTE` is added
+  to `question_prompt`/`explain_prompt` only when `web=True` (`explain_prompt` then also gets `<references>`).
 - **`profile.UserProfile`**: the reader's local profile (`background`, `specialties`, `known`, `needs_help`,
   `notes`), TOML at `$PARATEXT_PROFILE` or `~/.config/paratext/profile.toml`. `to_prompt()` is appended to the
   system prompt, `known` concepts are passed to the glossary prompt as needing no entry, and `fingerprint()` is
@@ -91,6 +101,15 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   entries but never other AI entries. Explanations of arbitrary phrases are cached by `brief|detailed`, page and
   normalized phrase.
   - Persistence: JSON in `cache_dir/<sha256[:16]>-<sha1(provider.cache_key|audience|PROMPT_VERSION)[:10]>.json`.
+    It stores the resolved `document` path (second key), `title` and `pages`. Editing a PDF in place (Preview
+    saves highlights into the file) changes the hash, so `_load_cache` merges caches with the same settings tag
+    written for the same path, title and page count (`_stale_caches`, oldest first, current file wins), keeps
+    explained spots only where the same words still sit (`_phrase_at`), saves, and renames the old files
+    `*.json.adopted`. The constructor also calls `link_store.adopt(...)`.
+  - Web search: `allow_web` (the reader's checkbox) and `web_enabled` (also needs `provider.supports_web`). Only
+    whole-paper questions and "More depth" use it. Question records carry `"web": true` and `cached_answer`
+    matches on it; explanation keys become `detailed+web|page|phrase`, and `cached_explanation(..., web=None)`
+    prefers the web one.
   - Jobs run on a 2-worker `ThreadPoolExecutor`, with duplicate in-flight requests suppressed. Callbacks run on the
     worker thread. Tests and the CLI use `ImmediateExecutor` for synchronous runs.
 - **`reader/pageview.DocumentView`** (QGraphicsView): all pages stacked in one scene, in PDF points; zoom is the
@@ -102,14 +121,22 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   reports through the view's signals (`termHovered`, `termClicked` with the *list* of spans under the click,
   `selectionChanged`, `currentPageChanged`, `visiblePagesChanged`). The current page
   is the one with the largest visible area; `go_to` overrides it so navigation works when all pages fit.
-- **`reader/app.ReaderWindow`** (QMainWindow): toolbar, the view, and a side panel (info bar for "no AI", title,
-  body, footer, buttons). Engine callbacks run on worker threads; they call `EngineSignals.*.emit`, and Qt delivers
+- **`reader/app.ReaderWindow`** (QMainWindow): toolbar, the view, and a side panel: the info bar for "no AI", a
+  vertical `side_splitter` with three panes (explanation: title/body/footer/buttons; history list; linked files),
+  then the ask box, the web-search checkbox and the issue box, which size themselves. Both splitters' states are
+  saved on close to `$PARATEXT_UI_STATE` or `~/.config/paratext/ui.ini` (`QSettings`, ini format). The ask and
+  issue boxes are `reader/textbox.GrowingTextEdit`: a `QPlainTextEdit` that wraps, grows to `max_lines` (4) and
+  then scrolls, emits `submitted` on Enter (Shift+Enter is a newline) and has `text`/`setText` like `QLineEdit`.
+  Its scroll bar is off until the text overflows; one that toggled while growing changed the wrap width and left
+  the box a line short. `set_allow_web` (the checkbox) updates `config.allow_web` and the engine and saves; the
+  checkbox is disabled when `provider.supports_web` is false. Engine callbacks run on worker threads; they call `EngineSignals.*.emit`, and Qt delivers
   the slots on the GUI thread. Term spans per page are recomputed lazily (`_ensure_spans`) when
   `_glossary_version` changes (also bumped when a selection gets explained). The side panel's history list
   shows the questions asked (`_show_history`) or, after a click that hits several spans, the choices
   (`_show_span_choices`). The status bar's permanent label shows `provider.summary` (model, effort).
   Config: all windows share one `Config`; `open_setup` loads the file fresh and `adopt_config` updates the
-  shared object in place; `_save_config` re-reads the file and writes only default provider/audience. Visible pages plus the next one are requested as you scroll; "Explain whole paper"
+  shared object in place; `_save_config` re-reads the file and writes only default provider, audience and
+  `allow_web`. Visible pages plus the next one are requested as you scroll; "Explain whole paper"
   queues every page. Hover explanations are `reader/popup.ExplanationPopup`, a frameless
   `ToolTip`-type window with explicit colours that stays open until another term is hovered, the viewport gets
   a click/wheel/key (event filter), Escape, or the window deactivates. `QToolTip` auto-hid after a second or so
@@ -117,7 +144,9 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
 - **`reader/setup.SetupDialog`**: list of options (presets grouped as subscription / API key / local, plus custom
   entries) with a readiness mark, a form whose rows and choices come from `provider_capabilities`, "Fetch
   models", "Send a test prompt" (both on `QThreadPool` with `_JobSignals`), and "Save and use", which validates
-  with `make_provider` and writes the config. It edits a deep copy of the config; the window adopts
+  with `make_provider` and writes the config. The result line is a read-only `textbox.ResultText`, and the wrapped
+  notes get an Expanding size policy: a wrapped `QLabel` in this form got about 20 characters of width and a
+  stale one-line height, which cut the test reply to "Success! The model" (reported issue, 2026-11-05). It edits a deep copy of the config; the window adopts
   `dialog.config` on accept. `reader/profile_dialog.ProfileDialog` edits the reader profile the same way
   ("About you…" in the toolbar); the window saves it and rebuilds the engine.
 - **`links.py`**: `LinkStore` keeps files linked to a paper (`Link(path, kind pdf|data|folder, label, added,
@@ -128,7 +157,11 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   The engine takes `link_store=` and uses it in `ask_job` (the question cache is keyed with a fingerprint of the
   links) and `describe_link_job` (auto-run by the window when a file is linked; "Describe…" sets a user one).
   `ReaderWindow.open_in_new_window` opens a linked PDF in a second window kept in `_child_windows`. Tests get an
-  isolated links file from an autouse conftest fixture.
+  isolated links file (and `PARATEXT_UI_STATE`) from an autouse conftest fixture.
+  Every window has its own `LinkStore`, so each call re-reads the file when its mtime/size changed (`_fresh`)
+  before changing it. `adopt(hash, path, title)` moves entries recorded for the same path under an older hash
+  (title must match when both have one) to the new hash; a link already there wins. `remove` also clears a
+  back-link left under a linked PDF's older hash.
 - **`issues.py`**: the reader's "Log an issue" box. `log_issue(note, IssueContext, provider)` always appends the
   verbatim note plus context (paper, page, provider, audience, panel title) to `notes/ReportedIssues.md` (found
   through `repo_root()`: the `pyproject.toml` above the package, i.e. an editable install; else
@@ -141,7 +174,7 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   Finder hands files over as Apple Events, so `reader/app.FileOpenHandler` (an event filter installed by `run()`)
   opens `QFileOpenEvent` files; the launcher passes no argv. Verified live on 2026-11-03 with `open -a`.
 - **`config.py`**: TOML at `$PARATEXT_CONFIG` or `~/.config/paratext/config.toml`; the cache is at
-  `$PARATEXT_CACHE_DIR` or `~/.cache/paratext`. A missing config means offline mode. `Config.save()` writes the
+  `$PARATEXT_CACHE_DIR` or `~/.cache/paratext`. `allow_web` (written only when true) is the web-search permission. A missing config means offline mode. `Config.save()` writes the
   file (0600, comments dropped; `tomli-w`); the window saves on provider/audience changes. `paratext config --init`
   writes a commented template.
 

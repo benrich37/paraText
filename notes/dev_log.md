@@ -2,6 +2,40 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-05: edited PDFs keep their links and cache, resizable panel, growing text boxes, web search (issues 11-15)
+
+- Clipped test reply: a word-wrapped `QLabel` in the setup form gets a size hint about 20 characters wide (Qt's
+  `sizeForWidth` heuristic for short wrapped text), and its height went stale when the text changed, so
+  "Success! The model replied: OK" showed one line. The result line is now a read-only growing text box (it can
+  never clip; long errors scroll past six lines), and the wrapped notes get an Expanding policy.
+- Lost SI link: the paper had been highlighted in Preview, which saves into the file (incremental update), so its
+  SHA-256 changed and the links (and the cache: 284 terms over 13 pages and 4 questions) sat under the old hash.
+  Keying by hash was kept, because it survives renames and moves. When a document is opened, entries recorded
+  for the same resolved path under another hash are adopted if the title (and, for the cache, page count) match;
+  a different paper downloaded over the same name is not. Alternatives considered: the PDF trailer `/ID`
+  (survives incremental saves, but some producers write constant or no IDs) and a hash of the text (slow for long
+  papers on every open). Dry-run on copies of the real files restored the 13-page glossary, the 4 questions and
+  the SI link. Separately, each window's `LinkStore` used to write its whole in-memory copy, so two windows could
+  undo each other's links; it now re-reads the file when it changed before every call.
+- Resizable panel: the explanation, history and linked-files sections are panes of a vertical `QSplitter`,
+  like the main left/right split; both splitters' sizes are saved in `ui.ini`. The ask and issue boxes stay
+  below the splitter because their height follows their text (the other request).
+- Growing boxes: `GrowingTextEdit` (`QPlainTextEdit`, whose layout reports its height in wrapped lines). A scroll
+  bar policy of "as needed" made the box oscillate (scroll bar appears, wrap width shrinks, line count changes)
+  and settle a line short, so the scroll bar stays off until the text exceeds four lines, with a deferred refit
+  after a policy change. Stress-tested with 450 random lengths at three widths.
+- Literature access: a checkbox (persisted as `allow_web`, off by default) is the reader's permission. It
+  applies to whole-paper questions and "More depth", not to the glossary or brief explanations, which run per
+  page and must stay fast and cheap. Claude's "Research" mode is a claude.ai feature with no CLI or API
+  equivalent, so the closest available tools are used: Claude Code with only `WebSearch,WebFetch` available and
+  pre-approved (verified live: without the flags `-p` denies WebSearch; with them a question on reference [1]
+  of the real paper was answered with its DOI in 20 s on haiku), and the API's server-side web search and fetch.
+  The prompt asks for the cited works first (the "More depth" prompt gets the reference list), then the wider
+  literature, with every outside source named. Codex and Gemini CLIs are not installed here, so their web flags
+  are unverified and not set; custom commands can add `web_args` in the config.
+- Not changed: `PROMPT_VERSION`, because the prompts without web search are word-for-word the same. The model
+  still sometimes writes a markdown link in an answer although the prompt asks for plain text.
+
 ## 2026-11-04 (night): settings visibility and persistence, explanation history (issues 8-10)
 
 - The "settings reset" report could not be reproduced: the config file had not been written since Nov 1, so

@@ -36,6 +36,10 @@ default_provider = "claude-cli"
 # Who the explanations are written for.
 audience = "{audience}"
 
+# Let the AI look up cited papers and search the web for whole-paper questions and "More depth"
+# (Claude Code and the Anthropic API only). The reader's checkbox sets this.
+allow_web = false
+
 # --- Use a chat subscription through the vendor's own CLI (no API key) ---
 [providers.claude-cli]
 preset = "claude-cli"          # Claude Code: run `claude` once to sign in
@@ -86,6 +90,8 @@ class Config:
     providers: dict[str, dict] = field(default_factory=dict)
     cache_dir: Path = field(default_factory=default_cache_dir)
     path: Path | None = None
+    #: the reader allows web search (cited papers, literature) for questions and "More depth"
+    allow_web: bool = False
 
     @classmethod
     def load(cls, path=None) -> Config:
@@ -102,6 +108,7 @@ class Config:
             providers=dict(data.get("providers", {})),
             cache_dir=Path(cache_dir).expanduser() if cache_dir else default_cache_dir(),
             path=path,
+            allow_web=bool(data.get("allow_web", False)),
         )
 
     def save(self, path=None) -> Path:
@@ -116,6 +123,8 @@ class Config:
         data["audience"] = self.audience
         if self.cache_dir != default_cache_dir():
             data["cache_dir"] = str(self.cache_dir)
+        if self.allow_web:
+            data["allow_web"] = True
         if self.providers:
             data["providers"] = {
                 name: {k: v for k, v in s.items() if v is not None} for name, s in self.providers.items()

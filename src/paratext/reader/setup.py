@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -40,6 +41,7 @@ from paratext.ai.providers import (
     provider_capabilities,
 )
 from paratext.config import Config
+from paratext.reader.textbox import ResultText
 
 CUSTOM_NAMES = {"custom-openai": "Custom OpenAI-compatible server", "custom-command": "Custom command"}
 CUSTOM_SETTINGS = {
@@ -48,6 +50,11 @@ CUSTOM_SETTINGS = {
 }
 TEST_SYSTEM = "You are a connectivity check for the paraText reader."
 TEST_PROMPT = "Reply with the single word OK."
+
+
+def _use_full_width(label: QLabel) -> None:
+    """Let a wrapped label take the whole form width (its size hint is about 20 characters wide otherwise)."""
+    label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
 
 class _JobSignals(QObject):
@@ -180,10 +187,12 @@ class SetupDialog(QDialog):
         test_row.addWidget(self.test_button)
         test_row.addStretch(1)
         form.addRow("", test_row)
-        self.result_label = QLabel()
-        self.result_label.setWordWrap(True)
-        self.result_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        # A read-only text box, not a QLabel: a wrapped label here got a stale one-line height and clipped the
+        # test reply to "Success! The model" (reported issue, 2026-11-05). This one grows, then scrolls.
+        self.result_label = ResultText(max_lines=6)
         form.addRow("", self.result_label)
+        for label in (self.description_label, self.key_note, self.model_note, self.effort_note):
+            _use_full_width(label)
 
         self.buttons = QDialogButtonBox()
         self.save_button = self.buttons.addButton("Save and use", QDialogButtonBox.ButtonRole.AcceptRole)
@@ -432,7 +441,7 @@ class SetupDialog(QDialog):
         if error:
             self.result_label.setText(f"Test failed: {error}")
         else:
-            self.result_label.setText(f"Success! The model replied: {str(reply).strip()[:200]!r}")
+            self.result_label.setText(f"Success! The model replied: {str(reply).strip()[:2000]}")
 
     def accept(self) -> None:
         if not self.selected_name:

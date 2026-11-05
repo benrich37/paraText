@@ -91,3 +91,57 @@ def test_descriptions_and_link_context(tmp_path):
     assert "(file not found)" in text
     assert "(omitted: no room)" in link_context(store.links("abc"), max_chars=50)
     assert "facet,energy" in link_sample(links[1]) and "Title: Supporting Information" in link_sample(links[0])
+
+
+def test_links_survive_editing_the_pdf(tmp_path):
+    """Highlighting a PDF in Preview rewrites it, changing its hash; its links must follow it."""
+    from paratext.links import file_sha256
+    from paratext.testing import highlight_pdf, make_sample_pdf
+
+    main = make_sample_pdf(tmp_path / "main.pdf", title="Main")
+    si = make_sample_pdf(tmp_path / "si.pdf", title="SI")
+    store = LinkStore(tmp_path / "links.json")
+    old = file_sha256(main)
+    store.add(old, si, "pdf", doc_path=str(main), doc_title="Main")
+    store.set_description(old, si, "the SI: check it for SI figures")
+    highlight_pdf(main)
+    new = file_sha256(main)
+    assert new != old and store.links(new) == []
+    assert store.adopt(new, main, "Main") == 1
+    links = store.links(new)
+    assert [link.path for link in links] == [str(si.resolve())] and links[0].description.startswith("the SI")
+    assert store.links(old) == [] and store.adopt(new, main, "Main") == 0  # moved once, not copied
+    # the back-link from the SI still names the paper by path, and unlinking still removes both
+    assert [link.path for link in store.links(file_sha256(si))] == [str(main.resolve())]
+    assert store.remove(new, si) and store.links(file_sha256(si)) == []
+
+
+def test_adopt_keeps_the_newer_link_and_checks_the_title(tmp_path):
+    store = LinkStore(tmp_path / "links.json")
+    si = tmp_path / "si.pdf"
+    si.write_bytes(b"%PDF")
+    data = tmp_path / "d.csv"
+    data.write_text("x")
+    paper = tmp_path / "paper.pdf"
+    store.add("old", si, "data", doc_path=str(paper), doc_title="Paper")
+    store.add("old", data, doc_path=str(paper))
+    store.add("new", si, "data", doc_path=str(paper), doc_title="Paper")
+    store.set_description("new", si, "newer description")
+    # another paper saved later at the same path (a different title) does not inherit the links; entries from
+    # before titles were recorded match on the path alone
+    assert store.adopt("other", paper, "Something else") == 0 and store.links("other") == []
+    assert store.adopt("new", paper, "Paper") == 1
+    by_path = {link.name: link for link in store.links("new")}
+    assert set(by_path) == {"si.pdf", "d.csv"} and by_path["si.pdf"].description == "newer description"
+
+
+def test_stores_in_two_windows_do_not_overwrite_each_other(tmp_path):
+    a = LinkStore(tmp_path / "links.json")
+    b = LinkStore(tmp_path / "links.json")  # e.g. the SI opened in a second window, holding its own copy
+    one, two = tmp_path / "one.csv", tmp_path / "two.csv"
+    one.write_text("1")
+    two.write_text("2")
+    a.add("paper", one)
+    b.add("paper", two)
+    assert [link.name for link in LinkStore(tmp_path / "links.json").links("paper")] == ["one.csv", "two.csv"]
+    assert [link.name for link in a.links("paper")] == ["one.csv", "two.csv"]

@@ -188,7 +188,11 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-05 11:05 — Setup window test prompt response appears cut off
 
 - **Category:** bug
-- **Status:** open
+- **Status:** done (2026-11-05). Yes, it was cut off by the layout, not by the
+  model (the reply was "OK"). A word-wrapped label in that form got a width of about 20 characters and a height
+  that did not update, so only "Success! The model" showed. The result line is now a read-only text box that spans
+  the form, grows with its text and scrolls past six lines, so nothing can be hidden. The other notes in the form
+  also get the full width now. The reply is shown without quotes. Tests check the width and the height.
 - Paper: Enhanced glycerol valorization via descriptor-guided dual-site engineering in Ni-doped MnO2 (page 1 of 13), `/Users/richb/Desktop/Patty-proj/1-s2.0-S0926337325011105-main.pdf`
 - AI: claude-cli:claude -p --model opus --effort high; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: discussion
@@ -202,7 +206,16 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-05 11:06 — Linked SI PDF disappears from "linked files" between sessions
 
 - **Category:** bug
-- **Status:** open
+- **Status:** done (2026-11-05). Cause: the paper was highlighted in Preview at
+  12:48 on Nov 4, after the SI was linked at 11:45. Preview saves highlights into the PDF, which changed the file's
+  SHA-256, and links are keyed by that hash, so the link sat under the old one. The same thing stranded that
+  paper's AI cache (284 terms over all 13 pages and 4 questions). Now, when a paper is opened, links and caches
+  recorded for the same file path under an older hash move to the new one, provided the title (and for the cache
+  the page count) still match. A different paper saved over the same file name is not affected. A dry run on
+  copies of your files restored the SI link with your newer description, the 13-page glossary and the 4 questions.
+  The old glossary was made with Claude Code's default model, so it reappears when that setting is used. A second
+  way to lose links was also closed: each window kept its own copy of the links file and could write it back over
+  links added in another window. It now re-reads the file before every change.
 - Paper: Enhanced glycerol valorization via descriptor-guided dual-site engineering in Ni-doped MnO2 (page 1 of 13), `/Users/richb/Desktop/Patty-proj/1-s2.0-S0926337325011105-main.pdf`
 - AI: claude-cli:claude -p --model opus --effort high; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: discussion
@@ -216,7 +229,10 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-05 11:11 — Make right-panel sub-widget heights adjustable like the left/right split
 
 - **Category:** ui
-- **Status:** open
+- **Status:** done (2026-11-05). The explanation, the "Questions asked" list and the
+  "Linked files" section are now panes of a vertical splitter. Drag the handles between them, as with the
+  left/right split. Both splitters' sizes are remembered across sessions in `~/.config/paratext/ui.ini`. The
+  question and issue boxes stay below the splitter, because their height follows their text (next issue).
 - Paper: Enhanced glycerol valorization via descriptor-guided dual-site engineering in Ni-doped MnO2 (page 1 of 13), `/Users/richb/Desktop/Patty-proj/1-s2.0-S0926337325011105-main.pdf`
 - AI: claude-cli:claude -p --model opus --effort high; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: discussion
@@ -230,7 +246,9 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-05 11:16 — Make question and issue text boxes wrap and grow to four lines
 
 - **Category:** ui
-- **Status:** open
+- **Status:** done (2026-11-05). Both boxes wrap long text onto new lines and grow one
+  line at a time up to four lines. Past four lines a vertical scroll bar appears and the box keeps its height.
+  Enter still asks or saves, and Shift+Enter starts a new line. The Ask button stays at the top of the box.
 - Paper: Enhanced glycerol valorization via descriptor-guided dual-site engineering in Ni-doped MnO2 (page 1 of 13), `/Users/richb/Desktop/Patty-proj/1-s2.0-S0926337325011105-main.pdf`
 - AI: claude-cli:claude -p --model opus --effort high; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: discussion
@@ -244,7 +262,20 @@ and change **Status** to `done` (with the commit) or `wontfix` (with the reason)
 ## 2026-11-05 11:27 — Let AI consult cited papers and literature, with user permission
 
 - **Category:** feature
-- **Status:** open
+- **Status:** done (2026-11-05) for Claude Code and the Anthropic API. A checkbox
+  under the question box, "Let the AI look up cited papers and search the web", is the permission. It is off by
+  default, remembered in the config as `allow_web`, and shown in the status bar ("web search on"). With it on,
+  whole-paper questions and "More depth" let the model look up the works the paper cites, then the wider
+  literature. "More depth" also gets the paper's reference list, so it can resolve "[23]". The model must name
+  every outside source and say when it could not reach one. Glossary building and brief explanations never
+  search, to stay fast and cheap. Answers that could search are marked 🌐 in the list and in the footer.
+  Claude's "Research" mode is a claude.ai feature that the CLI and API do not offer, so paraText uses the
+  nearest tools. Claude Code runs with only its WebSearch and WebFetch tools, pre-approved for those requests.
+  Verified live: without the flags it refuses to search, and with them it answered a question about reference
+  [1] of this paper with the DOI in 20 s. The Anthropic API uses server-side web search (at most 5 searches) and
+  web fetch. Not yet: the Codex and Gemini CLIs, whose web options could not be checked because neither is
+  installed here, and OpenAI-compatible servers. Those options are in the roadmap. `paratext ask --web` does the
+  same from the command line.
 - Paper: Enhanced glycerol valorization via descriptor-guided dual-site engineering in Ni-doped MnO2 (page 1 of 13), `/Users/richb/Desktop/Patty-proj/1-s2.0-S0926337325011105-main.pdf`
 - AI: claude-cli:claude -p --model opus --effort high; audience: an undergraduate science student who is not a specialist in this paper's field
 - Side panel showed: For my research project, we observed Ni cycling between Ni(II) and Ni(III) to be part of our adsorbate oxidation mechanism. For our surface, it is not obvious how to structure the coordination environment to reflect those oxidation states (ie should there be two oxygen vacancies adjacent to a surface Ni, and should the other two coordination oxygens be protonated to get Ni(II), and one is deprotonated to get Ni(III)?) - is there any information in this study that could help us figure out surface Ni coordination environment?

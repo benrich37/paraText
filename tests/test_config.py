@@ -62,3 +62,14 @@ def test_save_round_trip(tmp_path):
     assert again.providers == config.providers
     assert again.make_provider().api_key == "sk-secret"
     assert again.make_provider("mine").timeout == 60.0
+
+
+def test_web_permission_round_trip(tmp_path):
+    path = tmp_path / "config.toml"
+    assert Config.load(path).allow_web is False
+    config = Config(path=path, allow_web=True)
+    config.save()
+    assert "allow_web = true" in path.read_text() and Config.load(path).allow_web is True
+    config.allow_web = False
+    config.save()
+    assert "allow_web" not in path.read_text() and Config.load(path).allow_web is False

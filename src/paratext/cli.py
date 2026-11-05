@@ -103,9 +103,12 @@ def cmd_explain(args, config: Config) -> int:
 
 def cmd_ask(args, config: Config) -> int:
     engine = _engine(args, config)
-    text = engine.cached_answer(args.question)
+    web = bool(args.web and engine.provider and engine.provider.supports_web)
+    if args.web and not web:
+        print("paratext: this provider cannot search the web; answering from the paper only.", file=sys.stderr)
+    text = engine.cached_answer(args.question, web)
     if text is None:
-        text = engine.ask_job(args.question)
+        text = engine.ask_job(args.question, web)
     print(text)
     return 0
 
@@ -118,8 +121,11 @@ def cmd_links(args, config: Config) -> int:
     doc = PdfDocument(args.pdf)
     store = LinkStore()
     try:
+        moved = store.adopt(doc.sha256, doc.path, doc.title)
+        if moved:
+            print(f"(moved {moved} link(s) recorded before the PDF was edited)")
         for path in args.add or []:
-            link = store.add(doc.sha256, path, args.kind, doc_path=str(doc.path))
+            link = store.add(doc.sha256, path, args.kind, doc_path=str(doc.path), doc_title=doc.title)
             print(f"linked {link.kind}: {link.path}")
         for path in args.remove or []:
             print(f"{'removed' if store.remove(doc.sha256, path) else 'not linked'}: {path}")
@@ -240,6 +246,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("ask", help="ask a question about the paper as a whole")
     p.add_argument("pdf")
     p.add_argument("question")
+    p.add_argument(
+        "--web", action="store_true", help="let the AI look up cited papers and search the web (claude-cli, anthropic)"
+    )
     ai_args(p)
     p.set_defaults(func=cmd_ask)
 

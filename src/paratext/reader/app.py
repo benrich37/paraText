@@ -14,11 +14,25 @@ from __future__ import annotations
 import html
 import logging
 import os
+from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QRunnable, Qt, QThreadPool, QUrl, Signal
+from PySide6.QtCore import (
+    QByteArray,
+    QEvent,
+    QObject,
+    QPoint,
+    QRect,
+    QRunnable,
+    QSettings,
+    Qt,
+    QThreadPool,
+    QUrl,
+    Signal,
+)
 from PySide6.QtGui import QAction, QColor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QFrame,
@@ -50,11 +64,25 @@ from paratext.reader.pageview import UNDERLINE_COLORS, DocumentView, TermSpan, l
 from paratext.reader.popup import ExplanationPopup
 from paratext.reader.profile_dialog import ProfileDialog
 from paratext.reader.setup import SetupDialog
+from paratext.reader.textbox import GrowingTextEdit
 
 log = logging.getLogger(__name__)
 
 # Explicit colours so the tooltip reads the same in light and dark themes
 TOOLTIP_STYLE = "QToolTip { color: #1b1b1b; background-color: #fff9db; border: 1px solid #adb5bd; padding: 6px; }"
+
+
+def ui_state_path() -> Path:
+    """Where the window remembers its pane sizes: ``$PARATEXT_UI_STATE`` or ``~/.config/paratext/ui.ini``."""
+    return Path(os.environ.get("PARATEXT_UI_STATE", Path.home() / ".config" / "paratext" / "ui.ini"))
+
+
+def _pane() -> tuple[QWidget, QVBoxLayout]:
+    """A section of the side panel's vertical splitter."""
+    widget = QWidget()
+    layout = QVBoxLayout(widget)
+    layout.setContentsMargins(0, 4, 0, 4)
+    return widget, layout
 
 
 class Subject:
@@ -229,18 +257,26 @@ class ReaderWindow(QMainWindow):
         info_layout.addWidget(info_button)
         layout.addWidget(self.info_bar)
 
+        # The explanation, the history and the linked files share the height; drag the handles between them
+        # like the one between the page view and this panel. The two text boxes below size themselves.
+        self.side_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.side_splitter.setChildrenCollapsible(False)
+        layout.addWidget(self.side_splitter, 1)
+
+        explain_pane, pane = _pane()
         self.panel_title = QLabel()
         self.panel_title.setWordWrap(True)
         self.panel_title.setStyleSheet("font-size: 16px; font-weight: bold;")
         self.panel_title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(self.panel_title)
+        pane.addWidget(self.panel_title)
         self.panel_text = QTextBrowser()
         self.panel_text.setOpenExternalLinks(True)
-        layout.addWidget(self.panel_text, 1)
+        self.panel_text.setMinimumHeight(60)
+        pane.addWidget(self.panel_text, 1)
         self.panel_footer = QLabel()
         self.panel_footer.setWordWrap(True)
         self.panel_footer.setStyleSheet("color: #868e96; font-style: italic;")
-        layout.addWidget(self.panel_footer)
+        pane.addWidget(self.panel_footer)
         buttons = QHBoxLayout()
         self.explain_button = QPushButton("Explain selection")
         self.explain_button.clicked.connect(self.explain_selection)
@@ -249,26 +285,27 @@ class ReaderWindow(QMainWindow):
         buttons.addWidget(self.explain_button)
         buttons.addWidget(self.depth_button)
         buttons.addStretch(1)
-        layout.addLayout(buttons)
+        pane.addLayout(buttons)
+        self.side_splitter.addWidget(explain_pane)
 
+        history_pane, pane = _pane()
         self.history_label = QLabel("Questions asked about this paper:")
-        self.history_label.setStyleSheet("margin-top: 6px;")
-        layout.addWidget(self.history_label)
+        pane.addWidget(self.history_label)
         self.history_list = QListWidget()
-        self.history_list.setMaximumHeight(96)
+        self.history_list.setMinimumHeight(36)
         self.history_list.setToolTip("Click to bring an earlier answer or explanation back")
         self.history_list.itemClicked.connect(self._history_clicked)
-        layout.addWidget(self.history_list)
+        pane.addWidget(self.history_list, 1)
+        self.side_splitter.addWidget(history_pane)
 
-        links_label = QLabel("Linked files (supporting information, data):")
-        links_label.setStyleSheet("margin-top: 6px;")
-        layout.addWidget(links_label)
+        links_pane, pane = _pane()
+        pane.addWidget(QLabel("Linked files (supporting information, data):"))
         self.links_list = QListWidget()
-        self.links_list.setMaximumHeight(96)
+        self.links_list.setMinimumHeight(36)
         self.links_list.setToolTip("Double-click to open: PDFs in a new paraText window, other files with the system")
         self.links_list.itemDoubleClicked.connect(self.open_link)
         self.links_list.itemSelectionChanged.connect(self._update_buttons)
-        layout.addWidget(self.links_list)
+        pane.addWidget(self.links_list, 1)
         link_row = QHBoxLayout()
         self.link_pdf_button = QPushButton("Link PDF…")
         self.link_pdf_button.setToolTip("Link supporting-information or related PDFs to this paper")
@@ -293,36 +330,47 @@ class ReaderWindow(QMainWindow):
         link_row.addWidget(self.open_link_button)
         link_row.addWidget(self.describe_link_button)
         link_row.addWidget(self.unlink_button)
-        layout.addLayout(link_row)
+        pane.addLayout(link_row)
+        self.side_splitter.addWidget(links_pane)
+        self.side_splitter.setStretchFactor(0, 1)
+        self.side_splitter.setSizes([420, 110, 150])
 
         ask_label = QLabel("Ask about the paper as a whole:")
         ask_label.setStyleSheet("margin-top: 6px;")
         layout.addWidget(ask_label)
         ask_row = QHBoxLayout()
-        self.ask_edit = QLineEdit()
-        self.ask_edit.setPlaceholderText("e.g. does the paper show that X causes Y?")
-        self.ask_edit.setClearButtonEnabled(True)
-        self.ask_edit.returnPressed.connect(self.ask_question)
+        self.ask_edit = GrowingTextEdit(max_lines=4)
+        self.ask_edit.setPlaceholderText(
+            "e.g. does the paper show that X causes Y? (Enter asks; Shift+Enter starts a new line)"
+        )
+        self.ask_edit.submitted.connect(self.ask_question)
         ask_row.addWidget(self.ask_edit, 1)
         self.ask_button = QPushButton("Ask")
         self.ask_button.setToolTip("Sends the whole paper's text with your question, not just the current page")
         self.ask_button.clicked.connect(self.ask_question)
-        ask_row.addWidget(self.ask_button)
+        ask_row.addWidget(self.ask_button, 0, Qt.AlignmentFlag.AlignTop)
         layout.addLayout(ask_row)
+        self.web_check = QCheckBox("Let the AI look up cited papers and search the web")
+        self.web_check.setChecked(self.config.allow_web)
+        self.web_check.toggled.connect(self.set_allow_web)
+        layout.addWidget(self.web_check)
         issue_label = QLabel("Log an issue with paraText (saved for a later development session):")
         issue_label.setStyleSheet("margin-top: 6px; color: #868e96;")
         layout.addWidget(issue_label)
-        self.issue_edit = QLineEdit()
-        self.issue_edit.setPlaceholderText("what went wrong or what you want changed; Enter to save")
-        self.issue_edit.setClearButtonEnabled(True)
+        self.issue_edit = GrowingTextEdit(max_lines=4)
+        self.issue_edit.setPlaceholderText(
+            "what went wrong or what you want changed (Enter saves; Shift+Enter starts a new line)"
+        )
         self.issue_edit.setToolTip(f"Appends to {issues_path()}; the current AI model adds a title and write-up")
-        self.issue_edit.returnPressed.connect(self.log_issue_note)
+        self.issue_edit.submitted.connect(self.log_issue_note)
         layout.addWidget(self.issue_edit)
         splitter.addWidget(side)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([850, 350])
+        self.splitter = splitter
         self.setCentralWidget(splitter)
+        self._restore_layout()
         self.ai_label = QLabel()
         self.ai_label.setStyleSheet("color: #495057; margin-right: 6px;")
         self.statusBar().addPermanentWidget(self.ai_label)
@@ -381,8 +429,26 @@ class ReaderWindow(QMainWindow):
             self.doc = None
 
     def closeEvent(self, event) -> None:
+        self._save_layout()
         self.close_document()
         super().closeEvent(event)
+
+    def _layout_settings(self) -> QSettings:
+        return QSettings(str(ui_state_path()), QSettings.Format.IniFormat)
+
+    def _restore_layout(self) -> None:
+        """Bring back the pane sizes the reader dragged to last time (main split and the side panel's sections)."""
+        settings = self._layout_settings()
+        for key, splitter in (("main_splitter", self.splitter), ("side_splitter", self.side_splitter)):
+            state = settings.value(key)
+            if isinstance(state, QByteArray) and not state.isEmpty():
+                splitter.restoreState(state)
+
+    def _save_layout(self) -> None:
+        settings = self._layout_settings()
+        settings.setValue("main_splitter", self.splitter.saveState())
+        settings.setValue("side_splitter", self.side_splitter.saveState())
+        settings.sync()
 
     def _new_executor(self):
         if self.executor is None:
@@ -407,6 +473,7 @@ class ReaderWindow(QMainWindow):
             executor=self._new_executor(),
             profile=self.profile,
             link_store=self.links,
+            allow_web=self.config.allow_web,
         )
         self._glossary_version += 1
         for item in self.view.items:
@@ -445,6 +512,8 @@ class ReaderWindow(QMainWindow):
             text, tip = "AI: none", "No AI provider selected"
         else:
             text, tip = f"AI: {provider.name} — {provider.summary}", f"Cache key: {provider.cache_key}"
+            if self.config.allow_web and getattr(provider, "supports_web", False):
+                text += " · web search on"
             log.info("provider %s: %s", provider.name, provider.summary)
         self.ai_label.setText(text)
         self.ai_label.setToolTip(tip)
@@ -488,6 +557,7 @@ class ReaderWindow(QMainWindow):
             fresh.default_provider = self.config.default_provider
             fresh.audience = self.config.audience
             fresh.cache_dir = self.config.cache_dir
+            fresh.allow_web = self.config.allow_web
             fresh.save(self.config.path)
             self.config.providers = fresh.providers
             self.config.path = fresh.path
@@ -500,11 +570,27 @@ class ReaderWindow(QMainWindow):
         self.config.audience = config.audience
         self.config.providers = config.providers
         self.config.cache_dir = config.cache_dir
+        self.config.allow_web = config.allow_web
         self.config.path = config.path or self.config.path
         self.audience = self.config.audience
         self.audience_edit.setText(self.audience)
         self.audience_edit.setCursorPosition(0)
         self._fill_provider_box()
+
+    def set_allow_web(self, on: bool) -> None:
+        """The reader's permission for web search (cited papers, literature) in questions and "More depth"."""
+        on = bool(on)
+        if self.web_check.isChecked() != on:
+            self.web_check.setChecked(on)  # re-enters through toggled
+            return
+        if self.config.allow_web == on:
+            return
+        self.config.allow_web = on
+        if self.engine:
+            self.engine.allow_web = on
+        self._save_config()
+        self._show_ai_settings()
+        self._update_buttons()
 
     def open_setup(self) -> None:
         # start from the file, not this window's copy, so settings saved elsewhere are shown and kept
@@ -690,7 +776,7 @@ class ReaderWindow(QMainWindow):
             self.popup.hide()
         super().changeEvent(event)
 
-    def _footer(self, source: str, entry=None) -> str:
+    def _footer(self, source: str, entry=None, web: bool = False) -> str:
         """Who produced an explanation: the provider's cache key names the tool, model and effort."""
         if source == "acronym":
             return "Defined in the paper"
@@ -698,6 +784,8 @@ class ReaderWindow(QMainWindow):
             self.engine.provider.cache_key if self.engine and self.engine.provider else "AI"
         )
         text = f"AI-generated by {provider}; may contain mistakes"
+        if web:
+            text += " · web search was allowed: check the sources it names"
         if entry is not None and entry.proofread:
             text += f" · proofread by {entry.proofread}"
         return text
@@ -730,6 +818,23 @@ class ReaderWindow(QMainWindow):
         self.unlink_button.setEnabled(selected)
         self.ask_edit.setEnabled(has_ai)
         self.ask_button.setEnabled(has_ai)
+        provider = self.engine.provider if self.engine else None
+        if provider is None:
+            self.web_check.setEnabled(False)
+            self.web_check.setToolTip("Set up an AI provider first.")
+        elif not getattr(provider, "supports_web", False):
+            self.web_check.setEnabled(False)
+            self.web_check.setToolTip(
+                f"{provider.name} cannot search the web from paraText. Claude Code (claude-cli) and the Anthropic "
+                "API can; for other command-line tools add 'web_args' to their settings in the config file."
+            )
+        else:
+            self.web_check.setEnabled(True)
+            self.web_check.setToolTip(
+                "Applies to whole-paper questions and “More depth”: the AI may look up the papers this one cites "
+                "and search the literature when the paper and linked files do not settle it, and names its sources. "
+                "Slower, and uses more of your plan or API budget. Off: only the paper and linked files are used."
+            )
 
     def show_term(self, page: int, terms) -> None:
         """Show the clicked span(s); with several (a term inside an explained selection) list them to switch."""
@@ -789,7 +894,7 @@ class ReaderWindow(QMainWindow):
         if not self.engine:
             return
         for q in reversed(self.engine.questions):
-            item = QListWidgetItem(f"Q: {q['question']}")
+            item = QListWidgetItem(f"Q: {q['question']}" + ("  🌐" if q.get("web") else ""))
             item.setToolTip(q["answer"])
             item.setData(Qt.ItemDataRole.UserRole, ("question", q))
             self.history_list.addItem(item)
@@ -820,7 +925,7 @@ class ReaderWindow(QMainWindow):
         if kind == "question":
             self.subject = None
             self.view.clear_selection()
-            self.set_panel(payload["question"], payload["answer"], self._footer("ai"))
+            self.set_panel(payload["question"], payload["answer"], self._footer("ai", web=bool(payload.get("web"))))
             self._update_buttons()
         elif kind == "span":
             page, term = payload
@@ -857,7 +962,9 @@ class ReaderWindow(QMainWindow):
             self.set_panel(subject.phrase, "No AI provider selected. Choose one in the toolbar.")
             return
         self._pending_subject = (subject, detailed)
-        self.set_panel(subject.phrase, "Thinking…" if not detailed else self.panel_body() + "\n\nThinking…")
+        web = detailed and self.engine.web_enabled
+        thinking = "Thinking (and searching the literature)…" if web else "Thinking…"
+        self.set_panel(subject.phrase, thinking if not detailed else self.panel_body() + "\n\n" + thinking)
         self.engine.explain(
             subject.phrase, subject.page, subject.start, subject.end, detailed, callback=self._signals.explained.emit
         )
@@ -876,7 +983,8 @@ class ReaderWindow(QMainWindow):
         if detailed and subject.term_key:
             entry = self.engine.entry(subject.term_key)
             text = (entry.explanation + "\n\n" + text) if entry else text
-        self.set_panel(phrase, text, self._footer("ai"))
+        web = detailed and self.engine.cached_explanation(phrase, subject.page, True, web=True) is not None
+        self.set_panel(phrase, text, self._footer("ai", web=web))
         if not subject.term_key:  # a selection: it now carries a double underline that brings this back
             self._glossary_version += 1
             self._refresh_visible()
@@ -911,7 +1019,11 @@ class ReaderWindow(QMainWindow):
     def _add_links(self, paths, kind: str | None = None) -> None:
         if self.doc is None:
             return
-        added = [self.links.add(self.doc.sha256, p, kind, doc_path=str(self.doc.path)) for p in paths if p]
+        added = [
+            self.links.add(self.doc.sha256, p, kind, doc_path=str(self.doc.path), doc_title=self.doc.title)
+            for p in paths
+            if p
+        ]
         self._refresh_links()
         if added:
             self.links_list.setCurrentRow(self.links_list.count() - 1)
@@ -1009,7 +1121,9 @@ class ReaderWindow(QMainWindow):
         self.subject = None
         self.view.clear_selection()
         self._pending_question = question
-        self.set_panel(question, "Reading the whole paper…")
+        web = self.engine.web_enabled
+        reading = "Reading the whole paper and searching the literature…" if web else "Reading the whole paper…"
+        self.set_panel(question, reading)
         self._update_buttons()
         self.engine.ask(question, callback=self._signals.answered.emit)
 
@@ -1021,7 +1135,8 @@ class ReaderWindow(QMainWindow):
             self.set_panel(question, f"Could not get an answer: {error}")
             return
         self.ask_edit.clear()
-        self.set_panel(question, answer, self._footer("ai"))
+        record = next((q for q in reversed(self.engine.questions) if q["answer"] == answer), {})
+        self.set_panel(question, answer, self._footer("ai", web=bool(record.get("web"))))
         self._show_history()
 
     # ------------------------------------------------------------------

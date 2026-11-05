@@ -37,5 +37,6 @@ def tk_root():
 
 @pytest.fixture(autouse=True)
 def _isolated_links(tmp_path, monkeypatch):
-    """Never touch the user's real ~/.config/paratext/links.json from tests."""
+    """Never touch the user's real ~/.config/paratext/links.json (or the saved pane sizes) from tests."""
     monkeypatch.setenv("PARATEXT_LINKS", str(tmp_path / "links.json"))
+    monkeypatch.setenv("PARATEXT_UI_STATE", str(tmp_path / "ui.ini"))
