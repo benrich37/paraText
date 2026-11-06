@@ -2,6 +2,29 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-05 (later): wrapped labels that never clip (issue 16)
+
+- Reported: the setup dialog's description under the option title was cut off at the bottom. Reproduced with the
+  real macOS fonts by showing the dialog with `WA_DontShowOnScreen` (no window on screen; the offscreen platform's
+  fonts did not show it at the default size): the description needed 48 px and got 39, the model note needed 64
+  and got 39, with free space at the bottom. `QFormLayout` sized these rows from a height computed for another
+  width; the Expanding policy from the previous fix widened the labels but did not fix their heights.
+- Fix: `textbox.WrappedLabel`, a `QLabel` that fixes its height to `heightForWidth(width())` whenever it is shown
+  or its text or width changes (skipped while hidden, when the width is a 100 px placeholder). A minimum height
+  alone was not enough: the label's taller size hint pulled spare height into gaps above the notes. The layout
+  now has to make room, so the dialog grows to the tallest preset's form (698 px for OpenAI); it opens at 900×700
+  so it does not jump while you click through the options. Minimum widths are unchanged (checked against HEAD).
+- Same pattern elsewhere: the side panel's title (a two-line title got 32 of 38 px), footer and "no AI" bar are
+  `WrappedLabel`s now. The profile dialog's preview became a `ResultText` (eight lines, then it scrolls), because a
+  long profile would otherwise make that dialog taller than the screen; its form now lets fields grow
+  (macOS's default keeps them at hint width, and the Background field showed about 20 characters).
+- `GrowingTextEdit` did not refit when text was set before it was shown or when its width changed later (the
+  plain-text layout does not always report the rewrapped line count), so it now refits on show and on width
+  changes. The deferred refits use a single-shot `QTimer` owned by the box: `QTimer.singleShot(0, bound_method)`
+  fired after a dialog was deleted and raised "Internal C++ object already deleted" in the tests.
+- Noticed, not changed: the side panel cannot be narrower than about 610 px with macOS fonts, set by the six
+  link buttons in one row (roadmap item 21).
+
 ## 2026-11-05: edited PDFs keep their links and cache, resizable panel, growing text boxes, web search (issues 11-15)
 
 - Clipped test reply: a word-wrapped `QLabel` in the setup form gets a size hint about 20 characters wide (Qt's

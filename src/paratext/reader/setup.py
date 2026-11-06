@@ -24,7 +24,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
-    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -41,7 +40,7 @@ from paratext.ai.providers import (
     provider_capabilities,
 )
 from paratext.config import Config
-from paratext.reader.textbox import ResultText
+from paratext.reader.textbox import ResultText, WrappedLabel
 
 CUSTOM_NAMES = {"custom-openai": "Custom OpenAI-compatible server", "custom-command": "Custom command"}
 CUSTOM_SETTINGS = {
@@ -50,11 +49,6 @@ CUSTOM_SETTINGS = {
 }
 TEST_SYSTEM = "You are a connectivity check for the paraText reader."
 TEST_PROMPT = "Reply with the single word OK."
-
-
-def _use_full_width(label: QLabel) -> None:
-    """Let a wrapped label take the whole form width (its size hint is about 20 characters wide otherwise)."""
-    label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
 
 class _JobSignals(QObject):
@@ -77,7 +71,7 @@ class SetupDialog(QDialog):
     def __init__(self, config: Config, current: str | None = None, parent=None, pool: QThreadPool | None = None):
         super().__init__(parent)
         self.setWindowTitle("Set up AI for paraText")
-        self.resize(900, 560)
+        self.resize(900, 700)  # tall enough for every preset's notes, so switching does not resize it
         self.config = copy.deepcopy(config)
         self.pool = pool or QThreadPool.globalInstance()
         self.selected_name: str | None = None
@@ -119,8 +113,9 @@ class SetupDialog(QDialog):
         self.title_label = QLabel()
         self.title_label.setStyleSheet("font-size: 15px; font-weight: bold;")
         form.addRow(self.title_label)
-        self.description_label = QLabel()
-        self.description_label.setWordWrap(True)
+        # Wrapped notes in this form are WrappedLabels: a plain wrapped QLabel was given a row height worked out
+        # for another width and lost its last line (reported issue, 2026-11-05).
+        self.description_label = WrappedLabel()
         self.description_label.setOpenExternalLinks(True)
         self.description_label.setTextFormat(Qt.TextFormat.RichText)
         form.addRow(self.description_label)
@@ -140,8 +135,7 @@ class SetupDialog(QDialog):
         self.key_row = QWidget()
         self.key_row.setLayout(key_row)
         form.addRow("API key:", self.key_row)
-        self.key_note = QLabel()
-        self.key_note.setWordWrap(True)
+        self.key_note = WrappedLabel()
         self.key_note.setStyleSheet("color: #868e96;")
         form.addRow("", self.key_note)
 
@@ -161,15 +155,13 @@ class SetupDialog(QDialog):
         self.model_row = QWidget()
         self.model_row.setLayout(model_row)
         form.addRow("Model:", self.model_row)
-        self.model_note = QLabel()
-        self.model_note.setWordWrap(True)
+        self.model_note = WrappedLabel()
         self.model_note.setStyleSheet("color: #868e96;")
         form.addRow("", self.model_note)
 
         self.effort_combo = QComboBox()
         form.addRow("Effort:", self.effort_combo)
-        self.effort_note = QLabel()
-        self.effort_note.setWordWrap(True)
+        self.effort_note = WrappedLabel()
         self.effort_note.setStyleSheet("color: #868e96;")
         form.addRow("", self.effort_note)
 
@@ -191,8 +183,6 @@ class SetupDialog(QDialog):
         # test reply to "Success! The model" (reported issue, 2026-11-05). This one grows, then scrolls.
         self.result_label = ResultText(max_lines=6)
         form.addRow("", self.result_label)
-        for label in (self.description_label, self.key_note, self.model_note, self.effort_note):
-            _use_full_width(label)
 
         self.buttons = QDialogButtonBox()
         self.save_button = self.buttons.addButton("Save and use", QDialogButtonBox.ButtonRole.AcceptRole)

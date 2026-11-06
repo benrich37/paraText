@@ -106,3 +106,18 @@ def test_reader_applies_profile(qtbot, tmp_path, monkeypatch):
     assert (tmp_path / "profile.toml").exists()
     assert "About this reader: a chemist." in provider.calls[-1]["system"]
     assert window.engine.profile.background == "a chemist"
+
+
+def test_profile_dialog_preview_shows_every_line(qtbot):
+    # the preview sat in a form as a wrapped label, which a form can cut short (reported issue, 2026-11-05); it is
+    # now a read-only box that grows to eight lines and then scrolls, and the fields take the dialog's width
+    profile = UserProfile(background="computational chemist; DFT and electrocatalysis; new to kinetics " * 2)
+    dialog = ProfileDialog(profile)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    box = dialog.preview
+    qtbot.waitUntil(lambda: 1 < box.visual_lines() <= 8 and box.height() == box.height_for_lines(box.visual_lines()))
+    assert dialog.background_edit.width() > dialog.width() / 2
+    dialog.known_edit.setPlainText("\n".join(f"concept number {i}" for i in range(40)))
+    qtbot.waitUntil(lambda: box.visual_lines() > 8 and box.height() == box.height_for_lines(8))
+    assert box.verticalScrollBar().maximum() > 0

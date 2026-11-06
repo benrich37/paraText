@@ -471,6 +471,38 @@ def test_side_panel_sections_are_resizable_and_remembered(window_factory, tmp_pa
     assert again.side_splitter.sizes() == wanted and again.splitter.sizes() == main
 
 
+def test_side_panel_labels_show_every_line(window_factory, qtbot):
+    # wrapped labels could be given less height than their lines need and lose the last one (reported issue,
+    # 2026-11-05, in the setup dialog; the panel title had the same problem)
+    window = window_factory(FakeProvider())
+    title = "a fairly long phrase that was selected in the paper and has to wrap onto several lines " * 2
+    window.set_panel(title, "body", "Explained by fake · proofread by fake · web search was allowed " * 3)
+    labels = (window.panel_title, window.panel_footer)
+    qtbot.waitUntil(lambda: all(label.height() >= label.heightForWidth(label.width()) for label in labels))
+    assert window.panel_title.heightForWidth(window.panel_title.width()) > window.panel_title.fontMetrics().height()
+
+
+def test_text_box_refits_when_its_width_changes(qtbot):
+    # text set before the box is shown, or a box narrowed by a splitter, rewraps without the document always
+    # reporting the new line count; the box refits on show and on every width change
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+    from paratext.reader.textbox import GrowingTextEdit
+
+    holder = QWidget()
+    qtbot.addWidget(holder)
+    box = GrowingTextEdit(max_lines=4)
+    QVBoxLayout(holder).addWidget(box)
+    box.setText("does the paper show that the catalyst is stable " * 2)
+    holder.resize(900, 200)
+    holder.show()
+    qtbot.waitUntil(lambda: box.height() == box.height_for_lines(box.visual_lines()))
+    wide = box.visual_lines()
+    holder.resize(250, 200)
+    qtbot.waitUntil(lambda: box.visual_lines() > wide)
+    qtbot.waitUntil(lambda: box.height() == box.height_for_lines(min(box.visual_lines(), 4)))
+
+
 def test_question_and_issue_boxes_wrap_and_grow(window_factory, qtbot):
     from paratext.reader.textbox import GrowingTextEdit
 

@@ -64,7 +64,7 @@ from paratext.reader.pageview import UNDERLINE_COLORS, DocumentView, TermSpan, l
 from paratext.reader.popup import ExplanationPopup
 from paratext.reader.profile_dialog import ProfileDialog
 from paratext.reader.setup import SetupDialog
-from paratext.reader.textbox import GrowingTextEdit
+from paratext.reader.textbox import GrowingTextEdit, WrappedLabel
 
 log = logging.getLogger(__name__)
 
@@ -249,8 +249,7 @@ class ReaderWindow(QMainWindow):
         self.info_bar.setFrameShape(QFrame.Shape.StyledPanel)
         self.info_bar.setStyleSheet("QFrame { background: #fff3bf; color: #1b1b1b; border-radius: 4px; }")
         info_layout = QHBoxLayout(self.info_bar)
-        self.info_label = QLabel()
-        self.info_label.setWordWrap(True)
+        self.info_label = WrappedLabel()  # WrappedLabels keep every line; a wrapped QLabel could lose its last
         info_layout.addWidget(self.info_label, 1)
         info_button = QPushButton("Set up AI…")
         info_button.clicked.connect(self.open_setup)
@@ -264,8 +263,7 @@ class ReaderWindow(QMainWindow):
         layout.addWidget(self.side_splitter, 1)
 
         explain_pane, pane = _pane()
-        self.panel_title = QLabel()
-        self.panel_title.setWordWrap(True)
+        self.panel_title = WrappedLabel()
         self.panel_title.setStyleSheet("font-size: 16px; font-weight: bold;")
         self.panel_title.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         pane.addWidget(self.panel_title)
@@ -273,8 +271,7 @@ class ReaderWindow(QMainWindow):
         self.panel_text.setOpenExternalLinks(True)
         self.panel_text.setMinimumHeight(60)
         pane.addWidget(self.panel_text, 1)
-        self.panel_footer = QLabel()
-        self.panel_footer.setWordWrap(True)
+        self.panel_footer = WrappedLabel()
         self.panel_footer.setStyleSheet("color: #868e96; font-style: italic;")
         pane.addWidget(self.panel_footer)
         buttons = QHBoxLayout()

@@ -128,7 +128,8 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   issue boxes are `reader/textbox.GrowingTextEdit`: a `QPlainTextEdit` that wraps, grows to `max_lines` (4) and
   then scrolls, emits `submitted` on Enter (Shift+Enter is a newline) and has `text`/`setText` like `QLineEdit`.
   Its scroll bar is off until the text overflows; one that toggled while growing changed the wrap width and left
-  the box a line short. `set_allow_web` (the checkbox) updates `config.allow_web` and the engine and saves; the
+  the box a line short. It also refits on show and on width changes, through a single-shot `QTimer` it owns.
+  The panel's title, footer and "no AI" bar are `textbox.WrappedLabel`s (see Gotchas). `set_allow_web` (the checkbox) updates `config.allow_web` and the engine and saves; the
   checkbox is disabled when `provider.supports_web` is false. Engine callbacks run on worker threads; they call `EngineSignals.*.emit`, and Qt delivers
   the slots on the GUI thread. Term spans per page are recomputed lazily (`_ensure_spans`) when
   `_glossary_version` changes (also bumped when a selection gets explained). The side panel's history list
@@ -144,11 +145,12 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
 - **`reader/setup.SetupDialog`**: list of options (presets grouped as subscription / API key / local, plus custom
   entries) with a readiness mark, a form whose rows and choices come from `provider_capabilities`, "Fetch
   models", "Send a test prompt" (both on `QThreadPool` with `_JobSignals`), and "Save and use", which validates
-  with `make_provider` and writes the config. The result line is a read-only `textbox.ResultText`, and the wrapped
-  notes get an Expanding size policy: a wrapped `QLabel` in this form got about 20 characters of width and a
-  stale one-line height, which cut the test reply to "Success! The model" (reported issue, 2026-11-05). It edits a deep copy of the config; the window adopts
-  `dialog.config` on accept. `reader/profile_dialog.ProfileDialog` edits the reader profile the same way
-  ("About you…" in the toolbar); the window saves it and rebuilds the engine.
+  with `make_provider` and writes the config. The result line is a read-only `textbox.ResultText` and the wrapped
+  notes are `textbox.WrappedLabel`s (two reported issues, 2026-11-05: the test reply cut to "Success! The model",
+  and the description cut off at the bottom). The dialog opens at 900×700, which fits every preset's form. It edits
+  a deep copy of the config; the window adopts `dialog.config` on accept. `reader/profile_dialog.ProfileDialog`
+  edits the reader profile the same way ("About you…" in the toolbar); the window saves it and rebuilds the
+  engine. Its preview is a `ResultText` (eight lines, then scrolls) and its form uses `ExpandingFieldsGrow`.
 - **`links.py`**: `LinkStore` keeps files linked to a paper (`Link(path, kind pdf|data|folder, label, added,
   description, description_by)`) in `$PARATEXT_LINKS` or `~/.config/paratext/links.json`, keyed by
   `PdfDocument.sha256`. PDF links are reciprocal (the linked PDF's hash gets a link back to the paper; `remove`
@@ -197,5 +199,11 @@ old text's tags, then deletes the old range. Right-click is Button-2 on macOS (a
 - The IDE's Python may not be the project `.venv`, so Pyright may flag `PySide6` imports as unresolved. Use
   `.venv/bin/python`.
 - `QFormLayout.setRowVisible(widget, bool)` hides rows; tests check `widget.isHidden()` (not `isVisible()`).
+- Don't use a plain word-wrapped `QLabel` in a form or splitter pane: Qt sized its row from a height worked out for
+  another width and cut off its last line. Use `textbox.WrappedLabel` (fixes its height to `heightForWidth` of its
+  real width) or, for text that can get long, `textbox.ResultText`. The offscreen test platform's fonts often hide
+  the clip; check with native fonts by showing the widget with `WA_DontShowOnScreen` and `grab()`.
+- In a widget that can be deleted, don't defer work with `QTimer.singleShot(0, bound_method)`: it can fire
+  after the object is gone. Use a `QTimer` owned by the widget.
 - Anthropic model IDs and API shapes come from the `claude-api` skill (cached 2026-10). Check the skill again before
   changing `AnthropicProvider`; don't rely on memory.

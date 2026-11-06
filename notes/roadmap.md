@@ -86,6 +86,12 @@ Ordered by priority. Update this file when you finish or discover something. Sta
     - Render the answer's source links (the panel shows plain text; the model sometimes writes markdown links).
     - Show which searches and fetches ran (Claude Code's `--output-format json` lists tool use).
 
+## Layout
+
+21. The side panel's minimum width is about 610 px with macOS fonts (measured 2026-11-05). It is set by the six
+    link buttons in one row ("Link PDF…" … "Unlink"); the "Log an issue…" label (about 400 px) is next. Two rows
+    of buttons, or a "Link…" menu, and a wrapped label would let the panel go to about 320 px.
+
 ## Bigger ideas
 
 13. A web front-end (local server + PDF.js) that reuses `engine.py`, if a browser-based or remote UI is ever

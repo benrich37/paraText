@@ -209,3 +209,21 @@ def test_claude_cli_model_and_effort_round_trip(dialog_factory, tmp_path, monkey
     again = dialog_factory(saved, current="claude-cli")
     assert again.model_combo.currentText() == "fable" and again.effort_combo.currentText() == "low"
     assert saved.make_provider("claude-cli").summary == "claude: model fable, effort low"
+
+
+def test_wrapped_notes_show_every_line(dialog_factory, qtbot):
+    # "The text between 'Claude (Claude Code subscription)' and 'Status' gets cut off at the bottom" (reported
+    # issue, 2026-11-05): the form gave wrapped labels a row height worked out for another width. The notes now
+    # take the height their text needs at their real width, and the dialog grows to make room.
+    dialog = dialog_factory(current="claude-cli")
+    dialog.resize(900, 420)
+    notes = (dialog.description_label, dialog.key_note, dialog.model_note, dialog.effort_note)
+    for name in ("claude-cli", "anthropic", "openai", "ollama", "claude-cli"):
+        dialog.select(name)
+
+        def all_lines_fit():
+            shown = [label for label in notes if not label.isHidden() and label.text()]
+            return shown and all(label.height() >= label.heightForWidth(label.width()) for label in shown)
+
+        qtbot.waitUntil(all_lines_fit)
+        assert dialog.description_label.width() > 300  # the full width of the form, not ~20 characters

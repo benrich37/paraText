@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from paratext.profile import UserProfile
+from paratext.reader.textbox import ResultText
 
 
 def _lines(widget: QPlainTextEdit) -> list[str]:
@@ -36,6 +37,7 @@ class ProfileDialog(QDialog):
         intro.setWordWrap(True)
         root.addWidget(intro)
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)  # macOS keeps hint widths
         root.addLayout(form, 1)
 
         self.background_edit = QLineEdit(self.profile.background)
@@ -50,9 +52,10 @@ class ProfileDialog(QDialog):
         self.needs_help_edit = self._list_edit(self.profile.needs_help, "concepts to explain carefully, every time")
         form.addRow("Need help with:", self.needs_help_edit)
 
-        self.preview = QLabel()
-        self.preview.setWordWrap(True)
-        self.preview.setStyleSheet("color: #5c5f66; font-style: italic;")
+        # A read-only text box rather than a wrapped QLabel, which a form can cut short (reported issue,
+        # 2026-11-05). It grows with the profile up to eight lines, then scrolls.
+        self.preview = ResultText(max_lines=8)
+        self.preview.setStyleSheet("QPlainTextEdit { background: transparent; color: #5c5f66; font-style: italic; }")
         form.addRow("The model is told:", self.preview)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
