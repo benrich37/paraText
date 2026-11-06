@@ -8,9 +8,13 @@ the links recorded for that path and title over to the new hash.
 
 from __future__ import annotations
 
+import contextlib
+import functools
 import hashlib
 import json
 import os
+import tempfile
+import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +27,19 @@ TEXT_SUFFIXES = {
 }  # fmt: skip
 MAX_TEXT_FILE_BYTES = 2_000_000
 MAX_FOLDER_ENTRIES = 200
+#: every LinkStore in this process: each window has one, and engine workers write descriptions from their threads
+_LOCK = threading.RLock()
+
+
+def _locked(method):
+    """Run a LinkStore method under the process-wide lock (read the file, change it, write it, as one step)."""
+
+    @functools.wraps(method)
+    def wrapper(*args, **kwargs):
+        with _LOCK:
+            return method(*args, **kwargs)
+
+    return wrapper
 
 
 def file_sha256(path) -> str:
@@ -68,7 +85,8 @@ class LinkStore:
     """All links, keyed by document hash; saved on every change.
 
     Every window has its own store, so each call first re-reads the file if someone else changed it: a store
-    holding an older copy must not write it back over links added elsewhere.
+    holding an older copy must not write it back over links added elsewhere. Public methods run under a
+    process-wide lock, because describe jobs write from worker threads while the window adds and removes links.
     """
 
     def __init__(self, path: Path | None = None):
@@ -94,19 +112,28 @@ class LinkStore:
             self._data = {}
             return
         try:
-            raw = json.loads(self.path.read_text())
-        except (OSError, json.JSONDecodeError):
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             return
         docs = raw.get("documents", {}) if isinstance(raw, dict) else {}
         self._data = {k: v for k, v in docs.items() if isinstance(v, dict)}
 
+    @_locked
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"version": 1, "documents": self._data}, indent=1, ensure_ascii=False))
-        os.replace(tmp, self.path)
+        text = json.dumps({"version": 1, "documents": self._data}, indent=1, ensure_ascii=False)
+        fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=self.path.name + ".", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(text)
+            os.replace(tmp, self.path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            raise
         self._stamp = self._file_stamp()
 
+    @_locked
     def links(self, doc_hash: str) -> list[Link]:
         self._fresh()
         return [Link(**item) for item in self._data.get(doc_hash, {}).get("links", [])]
@@ -121,6 +148,7 @@ class LinkStore:
             and (not title or not entry.get("title") or entry.get("title") == title)
         ]
 
+    @_locked
     def adopt(self, doc_hash: str, doc_path, title: str = "") -> int:
         """Move links recorded for this file under an older hash to ``doc_hash``; returns how many moved.
 
@@ -151,10 +179,12 @@ class LinkStore:
             self.save()
         return moved
 
+    @_locked
     def find(self, doc_hash: str, path) -> Link | None:
         path = str(Path(path).expanduser().resolve())
         return next((link for link in self.links(doc_hash) if link.path == path), None)
 
+    @_locked
     def add(
         self,
         doc_hash: str,
@@ -199,6 +229,7 @@ class LinkStore:
                 self.add(other, doc_path, "pdf", doc_path=path, reciprocal=False)
         return link
 
+    @_locked
     def remove(self, doc_hash: str, path, reciprocal: bool = True) -> bool:
         self._fresh()
         path = str(Path(path).expanduser().resolve())
@@ -219,6 +250,7 @@ class LinkStore:
                 self.remove(h, doc_path, reciprocal=False)
         return len(entry["links"]) != before
 
+    @_locked
     def set_description(self, doc_hash: str, path, description: str, by: str = "user") -> bool:
         self._fresh()
         path = str(Path(path).expanduser().resolve())

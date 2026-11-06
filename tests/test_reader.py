@@ -549,3 +549,62 @@ def test_web_search_permission(window_factory, tmp_path):
     window.web_check.setChecked(False)
     assert not window.engine.allow_web and not Config.load(tmp_path / "config.toml").allow_web
     assert "web search" not in window.ai_label.text()
+
+
+def test_a_file_that_is_not_a_pdf_keeps_the_open_paper(window_factory, tmp_path):
+    # opening used to close the current paper first, then fail with an exception in the slot: an empty window
+    # whose status bar still said "Opened …"
+    window = window_factory(FakeProvider())
+    bad = tmp_path / "notes.pdf"
+    bad.write_text("not a PDF")
+    for path in (bad, tmp_path / "missing.pdf"):
+        assert window.open_pdf(path) is False
+        assert window.doc is not None and window.doc.title == "A Study of Catalysis"
+        assert window.statusBar().currentMessage().startswith(f"Could not open {path.name}")
+    assert window.open_pdf(make_sample_pdf(tmp_path / "other.pdf", title="Other")) is True
+    assert window.doc.title == "Other"
+
+
+def test_closing_a_paper_drops_its_pending_answers(window_factory):
+    window = window_factory(FakeProvider())
+    window._pending_question = "Which facet?"
+    window.subject = object()
+    window._pending_subject = (window.subject, False)
+    window.close_document()
+    assert window._pending_question is None and window._pending_subject is None and window.subject is None
+    window._on_page_done(0, [], None)  # a job of the closed paper finishing: nothing to update, no exception
+
+
+def test_render_of_the_previous_document_is_not_cached(qtbot, tmp_path):
+    # a page still rendering when another paper was opened was cached for the new paper's page with the same
+    # number and scale, and shown there
+    import time
+
+    from paratext.pdf import PdfDocument
+    from paratext.reader.pageview import DocumentView
+
+    a = PdfDocument(make_sample_pdf(tmp_path / "a.pdf", pages=["Paper A has dense text. " * 12] * 3))
+    b = PdfDocument(make_sample_pdf(tmp_path / "b.pdf", pages=["b"] * 3))
+    slow = a.render
+    a.render = lambda page, scale: (time.sleep(0.2), slow(page, scale))[1]
+    view = DocumentView()
+    qtbot.addWidget(view)
+    view.set_document(a)
+    view.cache.get(2, 1.5)
+    time.sleep(0.05)
+    view.set_document(b)
+    view.pool.waitForDone()
+    qtbot.wait(50)
+    assert (2, 1.5) not in view.cache.items
+    view.cache.get(2, 1.5)  # the new paper's page renders and is cached as usual
+    qtbot.waitUntil(lambda: (2, 1.5) in view.cache.items)
+    a.close()
+    b.close()
+
+
+def test_read_audience_applies_to_the_session(qtbot, tmp_path):
+    config = Config(cache_dir=tmp_path / "cache", path=tmp_path / "config.toml")
+    window = ReaderWindow(config, None, "none", executor=ImmediateExecutor(), audience="a chemist")
+    qtbot.addWidget(window)
+    assert window.audience == "a chemist" and window.audience_edit.text() == "a chemist"
+    assert config.audience != "a chemist"  # not saved unless typed in the toolbar box

@@ -130,3 +130,27 @@ def test_ask_web(setup, capsys):
     assert capsys.readouterr().out.strip() == "searched"
     assert main(["--config", str(web_config), "ask", pdf, "Agreed?", "--provider", "w"]) == 0
     assert capsys.readouterr().out.strip() == "not"
+
+
+def test_bare_pdf_opens_the_reader(monkeypatch, tmp_path):
+    # the README's "paratext paper.pdf" failed with "invalid choice: 'paper.pdf'"; --audience was not passed on
+    calls = []
+    monkeypatch.setattr("paratext.reader.run", lambda *a, **kw: calls.append((a, kw)) or 0)
+    config = str(tmp_path / "none.toml")
+    assert main(["paper.pdf"]) == 0
+    assert main(["--config", config, "paper.pdf", "--provider", "none"]) == 0
+    assert main([]) == 0
+    assert main(["read", "paper.pdf", "--audience", "a chemist"]) == 0
+    assert [c[0][0] for c in calls] == ["paper.pdf", "paper.pdf", None, "paper.pdf"]
+    assert calls[1][0][1:] == ("none", config) and calls[3][1]["audience"] == "a chemist"
+    with pytest.raises(SystemExit):
+        main(["-h"])
+
+
+def test_broken_config_is_reported(tmp_path, capsys):
+    pdf = str(make_sample_pdf(tmp_path / "paper.pdf"))
+    config = tmp_path / "config.toml"
+    config.write_text('default_provider = "claude-cli\n')  # unterminated string
+    assert main(["--config", str(config), "glossary", pdf]) == 1
+    err = capsys.readouterr().err
+    assert "error:" in err and "config.toml is not valid TOML" in err

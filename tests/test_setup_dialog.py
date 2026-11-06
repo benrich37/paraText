@@ -227,3 +227,15 @@ def test_wrapped_notes_show_every_line(dialog_factory, qtbot):
 
         qtbot.waitUntil(all_lines_fit)
         assert dialog.description_label.width() > 300  # the full width of the form, not ~20 characters
+
+
+def test_unmatched_quote_in_the_command(dialog_factory):
+    # every keystroke re-split the command; an unfinished quote raised in the slot, and "Save and use" failed
+    # without a message
+    dialog = dialog_factory(current="custom-command")
+    dialog.command_edit.setText('my-llm --system "be brief')
+    assert "unmatched quote" in dialog.status_label.text()
+    dialog.accept()
+    assert dialog.result() == 0 and "unmatched quote" in dialog.result_label.text()
+    dialog.command_edit.setText('my-llm --system "be brief"')
+    assert dialog.current_settings()["command"] == ["my-llm", "--system", "be brief"]

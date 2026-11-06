@@ -75,6 +75,21 @@ model = ""
 """
 
 
+class ConfigError(ValueError):
+    """A settings file (config or reader profile) exists but cannot be read."""
+
+
+def read_toml(path: Path) -> dict:
+    """Parse a TOML settings file; :class:`ConfigError` names the file when it is not valid TOML."""
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        raise ConfigError(f"{path} is not valid TOML: {e}") from e
+    except OSError as e:
+        raise ConfigError(f"Could not read {path}: {e}") from e
+
+
 def default_config_path() -> Path:
     return Path(os.environ.get("PARATEXT_CONFIG", Path.home() / ".config" / "paratext" / "config.toml"))
 
@@ -99,8 +114,7 @@ class Config:
         path = Path(path) if path else default_config_path()
         if not path.exists():
             return cls(path=path)
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
+        data = read_toml(path)
         cache_dir = data.get("cache_dir")
         return cls(
             default_provider=data.get("default_provider") or None,

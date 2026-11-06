@@ -2,6 +2,44 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-06: code scan, 12 bugs fixed
+
+No reported issue was open. A read-through of the package (not the legacy tkinter widget) found these; each was
+reproduced before the fix and has a regression test (14 of the 16 new tests fail on the previous code; the
+other two cover the new merge rule and a non-UTF-8 locale, which only Windows CI has).
+- **Cache saves raced.** `save()` built its dict from the live `explanations`/`questions` under the lock and
+  serialized it outside (with `indent`, `json` uses the pure-Python encoder, which iterates the live dict), and
+  both workers wrote `<name>.tmp`. A 3-second stress run gave 171 "dictionary changed size during iteration" and
+  a FileNotFoundError from `os.replace`; in the reader each fails a job ("Page 5: …") and skips that save.
+- **Two engines on one cache file lost each other's work.** The window replaces its engine on "Save and use"
+  (even unchanged) while jobs run, and back-links make it easy to open the same paper in two windows. The old
+  engine's late save erased an answer the new one had saved; the new one's next save erased the old one's page.
+  Saves now merge what is on disk first (`_absorb`: what this engine lacks is added, its own entries win, terms
+  it removed in proofreading stay removed), under a process-wide lock, through a unique temporary file. Merging
+  rather than dropping the old engine's results keeps answers that took minutes (web search).
+- **`links.json` had the same race**, with worse effects: a failed save left the store's file stamp stale, the
+  next call re-read the file and dropped the unsaved links (6–10 of 100 in a stress run). A process-wide RLock
+  around every public method and unique temporary files fix it.
+- **Stale page images.** A page still rendering when another paper was opened was cached under the new paper's
+  page number and scale; fit-width gives papers of the same page size the same scale, so scrolling there showed
+  the old paper. Render jobs now carry a document generation.
+- **Opening a non-PDF or missing file** closed the open paper first, then raised in the slot: empty window, and
+  the status bar still said "Opened …"; `paratext read missing.pdf` crashed. It now keeps the open paper and says
+  why. Closing a paper also drops its pending explanation/question, so they cannot land on the next paper.
+- **`paratext paper.pdf`** (in the README) failed with "invalid choice"; `paratext read --audience` was ignored.
+- **Command-line providers used the locale's encoding**: on Windows (cp1252) a prompt with Greek letters raised
+  UnicodeEncodeError, which is not a ProviderError, so `paratext glossary` crashed. Now always UTF-8.
+- **Anthropic `pause_turn`**: only the latest paused part was sent back, so after a second pause the model lost
+  its earlier searches (the skill's loop keeps every part).
+- **Question cache and links**: the links fingerprint was taken after the answer, so a file linked during a slow
+  answer was recorded as used by it.
+- **Setup dialog**: an unfinished quote in the Command field raised on every keystroke and "Save and use" failed
+  silently; it is now a status message.
+- **Broken settings file**: a TOML typo in `config.toml` or `profile.toml` stopped the reader from starting (from
+  Finder, only the log showed why). `ConfigError` names the file; the reader shows it and starts without those
+  settings, and does not overwrite the file unless the setup dialog saves.
+- Also: a cache entry written by another version is skipped rather than failing to open the paper.
+
 ## 2026-11-05 (later): wrapped labels that never clip (issue 16)
 
 - Reported: the setup dialog's description under the option title was cut off at the bottom. Reproduced with the

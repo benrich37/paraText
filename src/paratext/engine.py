@@ -7,9 +7,11 @@ GUI must marshal them to its own thread.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
+import tempfile
 import threading
 from collections.abc import Callable
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
@@ -31,6 +33,9 @@ from paratext.pdf import PdfDocument
 from paratext.profile import UserProfile
 
 CACHE_VERSION = 1
+#: one save at a time in this process: several engines can share a cache file (the same paper in two windows,
+#: or an engine the window replaced while one of its jobs was still running)
+_SAVE_LOCK = threading.Lock()
 
 
 class ImmediateExecutor(Executor):
@@ -73,6 +78,7 @@ class ContextEngine:
         self.explanations: dict[str, str] = {}
         self.questions: list[dict] = []  # [{"question", "answer"}] in the order asked
         self.explained: list[dict] = []  # selections the reader asked to explain: {"phrase", "page", "start", "end"}
+        self._removed: set[str] = set()  # terms proofreading removed; another engine's copy must not bring them back
         self._load_cache()
         self._add_acronyms()
         if self.link_store is not None:
@@ -95,8 +101,8 @@ class ContextEngine:
     @staticmethod
     def _read_cache(path: Path) -> dict | None:
         try:
-            data = json.loads(path.read_text())
-        except (OSError, json.JSONDecodeError):
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):  # unreadable, not UTF-8, or not JSON
             return None
         return data if isinstance(data, dict) and data.get("version") == CACHE_VERSION else None
 
@@ -133,7 +139,10 @@ class ContextEngine:
         """Add one cache file's contents; later calls win for the same term or explanation."""
         # keyed by normalize_term(term): re-key on load so files written under an older rule still work
         for v in data.get("terms", {}).values():
-            entry = GlossaryEntry(**v)
+            try:
+                entry = GlossaryEntry(**v)
+            except TypeError:  # written by another version: skip the entry rather than fail to open the paper
+                continue
             self.terms[normalize_term(entry.term)] = entry
         self.processed_pages |= {p for p in data.get("processed_pages", []) if 0 <= p < self.doc.page_count}
         self.explanations.update(data.get("explanations", {}))
@@ -175,29 +184,77 @@ class ContextEngine:
                 except OSError:
                     pass
 
+    def _absorb(self, data: dict) -> None:
+        """Take in what another engine saved to this cache file: what this one lacks is added, its own entries win.
+
+        Call with ``self._lock`` held. Unlike :meth:`_merge_cache` (loading, where later files win), nothing this
+        engine holds is replaced, and terms it removed while proofreading stay removed.
+        """
+        for v in data.get("terms", {}).values():
+            try:
+                entry = GlossaryEntry(**v)
+            except TypeError:
+                continue
+            key = normalize_term(entry.term)
+            if key in self._removed:
+                continue
+            existing = self.terms.get(key)
+            if existing is None or (existing.source == "acronym" and entry.source != "acronym"):
+                self.terms[key] = entry
+        self.processed_pages |= {p for p in data.get("processed_pages", []) if 0 <= p < self.doc.page_count}
+        for k, v in data.get("explanations", {}).items():
+            self.explanations.setdefault(k, v)
+        seen = {(q["question"], q["answer"]) for q in self.questions}
+        for q in data.get("questions", []):
+            if "question" in q and "answer" in q and (q["question"], q["answer"]) not in seen:
+                self.questions.append(q)
+                seen.add((q["question"], q["answer"]))
+        spots = {(e["page"], e["start"], e["end"]) for e in self.explained}
+        for e in data.get("explained", []):
+            if {"phrase", "page", "start", "end"} <= set(e) and (e["page"], e["start"], e["end"]) not in spots:
+                self.explained.append(e)
+                spots.add((e["page"], e["start"], e["end"]))
+
     def save(self) -> None:
+        """Write the cache file, first taking in anything another engine saved there since.
+
+        Engines run jobs on two workers, and the same file can belong to several engines (the paper open in two
+        windows, or an engine replaced while a job was running), so saves are serialized, each writes its own
+        temporary file, and the data is copied under the lock before it is serialized.
+        """
         path = self.cache_path
         if not path:
             return
-        with self._lock:
-            data = {
-                "version": CACHE_VERSION,
-                "document": str(self.doc.path.resolve()),
-                "title": self.doc.title,
-                "pages": self.doc.page_count,
-                "provider": self.provider.cache_key if self.provider else None,
-                "audience": self.audience,
-                "reader_profile": self.profile.to_prompt(),
-                "processed_pages": sorted(self.processed_pages),
-                "terms": {k: e.to_dict() for k, e in self.terms.items()},
-                "explanations": self.explanations,
-                "questions": self.questions,
-                "explained": self.explained,
-            }
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False))
-        os.replace(tmp, path)
+        with _SAVE_LOCK:
+            on_disk = self._read_cache(path) if path.exists() else None
+            with self._lock:
+                if on_disk is not None:
+                    self._absorb(on_disk)
+                data = {
+                    "version": CACHE_VERSION,
+                    "document": str(self.doc.path.resolve()),
+                    "title": self.doc.title,
+                    "pages": self.doc.page_count,
+                    "provider": self.provider.cache_key if self.provider else None,
+                    "audience": self.audience,
+                    "reader_profile": self.profile.to_prompt(),
+                    "processed_pages": sorted(self.processed_pages),
+                    "terms": {k: e.to_dict() for k, e in self.terms.items()},
+                    "explanations": dict(self.explanations),
+                    "questions": [dict(q) for q in self.questions],
+                    "explained": [dict(e) for e in self.explained],
+                }
+            text = json.dumps(data, indent=1, ensure_ascii=False)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(text)
+                os.replace(tmp, path)
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp)
+                raise
 
     # ------------------------------------------------------------------
     # glossary
@@ -310,6 +367,7 @@ class ContextEngine:
                     continue
                 if action == "remove":
                     del self.terms[key]
+                    self._removed.add(key)
                     counts["removed"] += 1
                     continue
                 if action == "fix":
@@ -416,9 +474,9 @@ class ContextEngine:
         """Files the reader linked to this paper (SI PDFs, data, folders); they take part in questions."""
         return self.link_store.links(self.doc.sha256) if self.link_store else []
 
-    def links_fingerprint(self) -> str:
+    def links_fingerprint(self, links: list[Link] | None = None) -> str:
         """Changes when linked files or their descriptions change, so cached answers are not reused."""
-        items = sorted(f"{link.path}|{link.description}" for link in self.linked_files())
+        items = sorted(f"{link.path}|{link.description}" for link in (self.linked_files() if links is None else links))
         return hashlib.sha1("\n".join(items).encode()).hexdigest()[:10] if items else ""
 
     def cached_answer(self, question: str, web: bool | None = None) -> str | None:
@@ -448,10 +506,12 @@ class ContextEngine:
         if self.provider is None:
             raise ProviderError("No AI provider configured.")
         text, truncated = self.doc.full_text()
-        linked = link_context(self.linked_files())
-        prompt = prompts.question_prompt(text, question, self.audience, truncated, linked, web=web)
+        links = self.linked_files()
+        # fingerprint the files the prompt includes: a file linked while a (slow, web) answer is pending is not in it
+        fingerprint = self.links_fingerprint(links)
+        prompt = prompts.question_prompt(text, question, self.audience, truncated, link_context(links), web=web)
         answer = self._complete(prompt, web)
-        record = {"question": question.strip(), "answer": answer, "links": self.links_fingerprint()}
+        record = {"question": question.strip(), "answer": answer, "links": fingerprint}
         if web:
             record["web"] = True
         with self._lock:

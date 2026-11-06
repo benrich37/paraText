@@ -8,16 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import os
-import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import tomli_w
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pragma: no cover
-    import tomli as tomllib
 
 from paratext.glossary import normalize_term
 
@@ -72,8 +66,9 @@ class UserProfile:
         path = Path(path) if path else default_profile_path()
         if not path.exists():
             return cls(path=path)
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
+        from paratext.config import read_toml
+
+        data = read_toml(path)  # ConfigError names the file if it is not valid TOML
         return cls(
             background=data.get("background", ""),
             specialties=data.get("specialties", []),

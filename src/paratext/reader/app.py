@@ -53,7 +53,7 @@ from PySide6.QtWidgets import (
 )
 
 from paratext.ai.providers import ProviderError
-from paratext.config import Config
+from paratext.config import Config, ConfigError
 from paratext.engine import ContextEngine
 from paratext.glossary import Span
 from paratext.issues import IssueContext, issues_path, log_issue
@@ -123,13 +123,15 @@ class ReaderWindow(QMainWindow):
         provider_name=None,
         executor=None,
         profile: UserProfile | None = None,
+        audience: str | None = None,
     ):
         super().__init__()
         self.config = config or Config()
         self.profile = profile or UserProfile()
         self.executor = executor
         self.provider_name = provider_name or self.config.default_provider or "none"
-        self.audience = self.config.audience
+        #: ``paratext read --audience`` applies to this session only; typing in the toolbar box saves it
+        self.audience = (audience or "").strip() or self.config.audience
         self.doc: PdfDocument | None = None
         self.engine: ContextEngine | None = None
         self.subject: Subject | None = None
@@ -398,9 +400,18 @@ class ReaderWindow(QMainWindow):
         if path:
             self.open_pdf(path)
 
-    def open_pdf(self, path) -> None:
+    def open_pdf(self, path) -> bool:
+        """Show ``path``; returns False (and keeps the current paper) if it cannot be opened as a PDF."""
+        try:
+            doc = PdfDocument(path)
+        except Exception as e:  # missing, unreadable, or not a PDF: PyMuPDF raises several kinds
+            log.warning("could not open %s: %s", path, e)
+            self.statusBar().showMessage(f"Could not open {Path(path).name}: {e}")
+            if self.doc is None:
+                self.set_panel(f"Could not open {Path(path).name}", str(e))
+            return False
         self.close_document()
-        self.doc = PdfDocument(path)
+        self.doc = doc
         log.info("opened %s: %r, %d pages", path, self.doc.title, self.doc.page_count)
         self.setWindowTitle(f"paraText — {self.doc.title}")
         self.view.set_document(self.doc)
@@ -412,11 +423,16 @@ class ReaderWindow(QMainWindow):
         self._on_page_changed(0)
         self._refresh_links()
         self._show_history()
+        return True
 
     def close_document(self) -> None:
         self.popup.hide()
         self.links_list.clear()
         self.history_list.clear()
+        # answers still on their way belong to this paper, not to the next one
+        self.subject = None
+        self._pending_subject = None
+        self._pending_question = None
         if self.engine:
             self.engine.shutdown()
             self.engine = None
@@ -558,7 +574,7 @@ class ReaderWindow(QMainWindow):
             fresh.save(self.config.path)
             self.config.providers = fresh.providers
             self.config.path = fresh.path
-        except OSError as e:
+        except (OSError, ConfigError) as e:  # a broken file is reported and left alone, not overwritten
             self.statusBar().showMessage(f"Could not save settings: {e}")
 
     def adopt_config(self, config: Config) -> None:
@@ -591,7 +607,12 @@ class ReaderWindow(QMainWindow):
 
     def open_setup(self) -> None:
         # start from the file, not this window's copy, so settings saved elsewhere are shown and kept
-        current = Config.load(self.config.path) if self.config.path and self.config.path.exists() else self.config
+        current = self.config
+        if self.config.path and self.config.path.exists():
+            try:
+                current = Config.load(self.config.path)
+            except ConfigError as e:
+                self.statusBar().showMessage(f"{e}; the dialog starts from this window's settings.")
         dialog = SetupDialog(current, current=self.provider_name, parent=self)
         if dialog.exec():
             self.adopt_config(dialog.config)
@@ -677,6 +698,8 @@ class ReaderWindow(QMainWindow):
     _proofread_counts: dict = {}
 
     def _on_proofread_done(self, page: int, counts, error) -> None:
+        if self.engine is None:  # the paper was closed while the job ran
+            return
         self._proofread_left = max(0, self._proofread_left - 1)
         if error:
             self.statusBar().showMessage(f"Proofreading page {page + 1} failed: {error}")
@@ -715,6 +738,8 @@ class ReaderWindow(QMainWindow):
         item.update()
 
     def _on_page_done(self, page: int, entries, error) -> None:
+        if self.engine is None or self.doc is None:  # the paper was closed while the job ran
+            return
         if error:
             self.statusBar().showMessage(f"Page {page + 1}: {error}")
             return
@@ -1032,6 +1057,8 @@ class ReaderWindow(QMainWindow):
                     self.engine.describe_link(link, callback=self._signals.link_described.emit)
 
     def _on_link_described(self, link, text, error) -> None:
+        if self.doc is None:
+            return
         if error:
             self.statusBar().showMessage(f"Could not describe {link.name}: {error}")
             return
@@ -1197,15 +1224,31 @@ class FileOpenHandler(QObject):
         return super().eventFilter(obj, event)
 
 
-def run(pdf_path=None, provider_name=None, config_path=None) -> int:
+def run(pdf_path=None, provider_name=None, config_path=None, audience=None) -> int:
     import sys
+
+    from PySide6.QtWidgets import QMessageBox
 
     if os.environ.get("PARATEXT_LOG"):  # the macOS app bundle sets this; see macapp.py
         logging.basicConfig(level=os.environ["PARATEXT_LOG"].upper(), format="%(asctime)s %(name)s: %(message)s")
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("paraText")
     app.setApplicationDisplayName("paraText")
-    window = ReaderWindow(Config.load(config_path), pdf_path, provider_name, profile=UserProfile.load())
+    # A typo in a hand-edited settings file must not stop the reader from starting (from Finder there is no
+    # terminal to show the traceback). It starts without those settings and leaves the file alone.
+    try:
+        config = Config.load(config_path)
+    except ConfigError as e:
+        log.error("%s", e)
+        QMessageBox.warning(None, "paraText", f"{e}\n\nStarting without these settings. Fix the file and restart.")
+        config = Config(path=None)
+    try:
+        profile = UserProfile.load()
+    except ConfigError as e:
+        log.error("%s", e)
+        QMessageBox.warning(None, "paraText", f"{e}\n\nStarting without your reader profile.")
+        profile = UserProfile(path=None)
+    window = ReaderWindow(config, pdf_path, provider_name, profile=profile, audience=audience)
     app.installEventFilter(FileOpenHandler(window))
     window.show()
     return app.exec()

@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 
 import pytest
 
@@ -370,3 +371,102 @@ def test_more_depth_with_web_includes_the_reference_list(tmp_path):
         assert "<references>\nReferences\n[1] A. Author" in prompt and "doi:10.1/x" in prompt
         engine.explain("limiting potential", 1, 1, 2)
         assert "<references>" not in provider.calls[-1]["prompt"]
+
+
+def test_concurrent_saves(doc, tmp_path):
+    # "Explain whole paper" saves from two workers while an explanation or answer arrives: saving used to
+    # serialize the live dicts outside the lock ("dictionary changed size during iteration") and both workers
+    # wrote the same temporary file (one os.replace then failed). Each failure made that job report an error.
+    engine = make_engine(doc, tmp_path, FakeProvider())
+    for i in range(1500):
+        engine.explanations[f"brief|0|phrase {i}"] = "an explanation " * 10
+    errors = []
+
+    def saver():
+        for _ in range(25):
+            try:
+                engine.save()
+            except Exception as e:  # noqa: BLE001  (any failure is the bug)
+                errors.append(e)
+
+    def explainer():  # a bounded stream of new explanations, interleaved with the saves
+        for i in range(3000):
+            with engine._lock:
+                engine.explanations[f"detailed|1|new {i}"] = "x"
+            if i % 50 == 0:
+                time.sleep(0.001)
+
+    threads = [threading.Thread(target=saver), threading.Thread(target=saver), threading.Thread(target=explainer)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    data = json.loads(engine.cache_path.read_text(encoding="utf-8"))
+    assert len(data["explanations"]) >= 1500
+    assert not list(engine.cache_path.parent.glob("*.tmp"))
+
+
+def test_replaced_engine_does_not_wipe_newer_answers(doc, tmp_path):
+    # The window replaces its engine when settings are saved (even unchanged) while a job of the old one runs,
+    # and the same paper can be open in two windows. A save used to write only that engine's memory, so the old
+    # engine's late save erased the answer the new one had just saved (and the new one then erased the page).
+    from concurrent.futures import ThreadPoolExecutor
+
+    release = threading.Event()
+
+    class SlowGlossary(FakeProvider):
+        def complete(self, system, prompt, json_schema=None, web=False):
+            if json_schema is not None:
+                release.wait(5)
+            return super().complete(system, prompt, json_schema, web=web)
+
+    old = ContextEngine(doc, SlowGlossary(), tmp_path / "cache", executor=ThreadPoolExecutor(1))
+    future = old.ensure_page(0)
+    old.shutdown()
+    new = make_engine(doc, tmp_path, SlowGlossary())
+    assert new.cache_path == old.cache_path
+    new.ask_job("Does the paper use DFT?")
+    release.set()
+    future.result(timeout=5)
+    data = json.loads(new.cache_path.read_text(encoding="utf-8"))
+    assert [q["question"] for q in data["questions"]] == ["Does the paper use DFT?"]
+    assert 0 in data["processed_pages"] and "limiting potential" in data["terms"]
+    new.save()  # and the new engine's next save keeps the old engine's page
+    data = json.loads(new.cache_path.read_text(encoding="utf-8"))
+    assert 0 in data["processed_pages"] and new.is_page_done(0)
+
+
+def test_proofread_removal_is_not_undone_by_another_engines_copy(doc, tmp_path):
+    class Remover(FakeProvider):
+        def complete(self, system, prompt, json_schema=None, web=False):
+            if json_schema is not None and "corrections" in json_schema["properties"]:
+                return json.dumps({"corrections": [{"term": "limiting potential", "action": "remove"}]})
+            return super().complete(system, prompt, json_schema, web=web)
+
+    a = make_engine(doc, tmp_path, Remover())
+    a.page_job(0)
+    b = make_engine(doc, tmp_path, FakeProvider())  # the same paper in a second window
+    assert "limiting potential" in b.terms
+    a.proofread_job(0)
+    b.save()  # still holds the term, so the file has it again
+    a.save()
+    assert "limiting potential" not in a.terms
+
+
+def test_question_is_cached_with_the_links_it_was_asked_with(doc, tmp_path):
+    # a file linked while an answer is pending was not in the prompt, so the answer must not count as using it
+    from paratext.links import LinkStore
+
+    store = LinkStore(tmp_path / "links.json")
+    data = tmp_path / "facets.csv"
+    data.write_text("facet\n(001)\n")
+
+    class LinksDuringRequest(FakeProvider):
+        def complete(self, system, prompt, json_schema=None, web=False):
+            store.add(doc.sha256, data, doc_path=str(doc.path))
+            return super().complete(system, prompt, json_schema, web=web)
+
+    engine = make_engine(doc, tmp_path, LinksDuringRequest(explanation="From the paper."), link_store=store)
+    engine.ask_job("Which facet?")
+    assert engine.cached_answer("Which facet?") is None  # asked again, now with the CSV

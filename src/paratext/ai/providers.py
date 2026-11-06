@@ -221,6 +221,7 @@ class AnthropicProvider(Provider):
         client = self._client(anthropic, self.web_timeout if web else None)
         kwargs = self.request_kwargs(system, prompt, json_schema, web)
         texts = []
+        turn = []  # the assistant turn so far: every paused part goes back, not only the latest
         for _ in range(self.MAX_CONTINUATIONS + 1):
             try:
                 response = client.beta.messages.create(**kwargs)
@@ -235,8 +236,10 @@ class AnthropicProvider(Provider):
             texts.append("".join(block.text for block in response.content if block.type == "text"))
             if response.stop_reason != "pause_turn":
                 break
-            # the server-side search loop hit its iteration limit: send the turn back and it carries on
-            kwargs["messages"] = [kwargs["messages"][0], {"role": "assistant", "content": response.content}]
+            # the server-side search loop hit its iteration limit: send the turn back and it carries on. After a
+            # second pause the first part must still be there, or the model loses the searches it already ran.
+            turn += list(response.content)
+            kwargs["messages"] = [kwargs["messages"][0], {"role": "assistant", "content": list(turn)}]
         return "".join(texts)
 
 
@@ -306,13 +309,18 @@ class CommandProvider(Provider):
                 args,
                 input=full_prompt if self.prompt_via == "stdin" else None,
                 capture_output=True,
-                text=True,
+                # UTF-8 whatever the locale: paper text is full of Greek letters and symbols, which the
+                # Windows code page (or a Latin-1 locale) cannot encode
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout,
             )
         except FileNotFoundError as e:
             raise ProviderError(f"{self.name}: command not found: {self.command[0]}") from e
         except subprocess.TimeoutExpired as e:
             raise ProviderError(f"{self.name}: timed out after {timeout:.0f}s") from e
+        except OSError as e:  # e.g. not executable
+            raise ProviderError(f"{self.name}: could not run {self.command[0]}: {e}") from e
         if result.returncode != 0:
             raise ProviderError(f"{self.name}: exited with {result.returncode}: {result.stderr.strip()[:500]}")
         return result.stdout
@@ -556,7 +564,12 @@ def probe_claude_models(command: list[str] | str, timeout: float = 120.0) -> dic
         args = [*base, "-p", "--model", alias, "--effort", "low", "--output-format", "json"]
         try:
             result = subprocess.run(
-                args, input="Reply with the single word OK.", capture_output=True, text=True, timeout=timeout
+                args,
+                input="Reply with the single word OK.",
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
             )
         except subprocess.TimeoutExpired:
             failures.append(f"{alias}: timed out")

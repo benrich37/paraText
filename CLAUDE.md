@@ -24,7 +24,7 @@ python -m pytest                           # ~145 tests, ~8s; Qt tests run offsc
 python -m pytest tests/test_engine.py::test_cache_round_trip   # single test
 pre-commit run --all-files                 # check-yaml, end-of-file, trailing-whitespace, ruff (v0.6.4 pinned)
 ruff check . && ruff format .              # line length 120; rules pinned in pyproject (UP038 ignored)
-paratext read paper.pdf [--provider NAME]  # GUI
+paratext read paper.pdf [--provider NAME]  # GUI (`paratext paper.pdf` and plain `paratext` mean `read`)
 paratext setup                             # just the AI setup dialog
 paratext glossary paper.pdf --provider none --json   # headless; `none` = offline (acronyms only)
 paratext ask paper.pdf "question" [--web]  # whole-paper question (full text in the prompt), headless
@@ -64,7 +64,8 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
     defaults to `claude-opus-5-5` with `output_config.effort="low"`, and sends `output_config.format`
     (json_schema) when a schema is given. For models in `_FALLBACK_MODELS` it adds
     `fallbacks="default"` + beta `server-side-fallback-2026-07-01`. `stop_reason == "refusal"` raises.
-  - `CommandProvider` (subprocess, prompt on stdin). These are the "subscription" presets:
+  - `CommandProvider` (subprocess, prompt on stdin, always UTF-8: the locale's code page cannot encode paper
+    text). These are the "subscription" presets:
     `claude -p`, `codex exec -`, `gemini`. `model_args`/`effort_args` templates add the tool's flags;
     `claude-cli` has both (`--model X --effort Y`, verified live 2026-11-04 with Claude Code 2.1.318).
     `probe_claude_models` runs a one-word prompt per alias (`fable`, `opus`, `sonnet`, `haiku`) with
@@ -85,7 +86,7 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   claude-cli's are `--tools WebSearch,WebFetch --allowedTools WebSearch,WebFetch`; `-p` denies tools that would
   prompt, so without them nothing is searched (checked live 2026-11-05). `AnthropicProvider` adds the server tools
   `web_search_20260209` (`max_uses` = `web_max_searches`) and `web_fetch_20260209`, and resumes `pause_turn` up to
-  `MAX_CONTINUATIONS` times by sending the paused content back. codex/gemini have no `web_args` (unverified).
+  `MAX_CONTINUATIONS` times by sending the whole turn so far back (every paused part, not only the latest). codex/gemini have no `web_args` (unverified).
   `web_args` is not in `cache_key`; the engine keys web answers itself.
 - **`ai/prompts.py`**: all prompt text plus `PROMPT_VERSION`. Bump it when the wording changes; it is part of the
   cache key. `system_prompt(audience, reader_profile)` appends the profile paragraph. `WEB_RESEARCH_NOTE` is added
@@ -106,6 +107,10 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
     written for the same path, title and page count (`_stale_caches`, oldest first, current file wins), keeps
     explained spots only where the same words still sit (`_phrase_at`), saves, and renames the old files
     `*.json.adopted`. The constructor also calls `link_store.adopt(...)`.
+  - `save()` is additive: under a process-wide `_SAVE_LOCK` it first `_absorb`s what another engine wrote to the
+    same file (the paper open in two windows, or an engine the window replaced while a job ran), adding what this
+    engine lacks while its own entries win and terms proofreading removed (`_removed`) stay removed. It copies
+    the data under `self._lock` before serializing and writes through a unique `mkstemp` file.
   - Web search: `allow_web` (the reader's checkbox) and `web_enabled` (also needs `provider.supports_web`). Only
     whole-paper questions and "More depth" use it. Question records carry `"web": true` and `cached_answer`
     matches on it; explanation keys become `detailed+web|page|phrase`, and `cached_explanation(..., web=None)`
@@ -116,7 +121,8 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   view transform, so overlays need no zoom math. Each `PageItem.paint` asks `PixmapCache.get(page, scale)` for a
   pixmap at the effective scale (view zoom × devicePixelRatio, capped at 4); misses are rendered by `_RenderJob`
   on a 1-thread `QThreadPool` and the item repaints when `_RenderSignals.done` arrives, drawing any older-scale
-  pixmap meanwhile. Underlines/hover/selection are drawn in `paint` with cosmetic pens. `PageItem` does hover
+  pixmap meanwhile. Each job carries the view's `generation` (bumped by `set_document`); a render of the previous
+  document is dropped, or it would be cached as the new document's page with the same number and scale. Underlines/hover/selection are drawn in `paint` with cosmetic pens. `PageItem` does hover
   hit-testing (`span_at`; `spans_at` for every span under a click) and word selection (`doc.word_at`), and
   reports through the view's signals (`termHovered`, `termClicked` with the *list* of spans under the click,
   `selectionChanged`, `currentPageChanged`, `visiblePagesChanged`). The current page
@@ -135,6 +141,9 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   `_glossary_version` changes (also bumped when a selection gets explained). The side panel's history list
   shows the questions asked (`_show_history`) or, after a click that hits several spans, the choices
   (`_show_span_choices`). The status bar's permanent label shows `provider.summary` (model, effort).
+  `open_pdf` opens the new file before closing the current one and returns False (status bar message) if it is
+  not a readable PDF; `close_document` clears the pending explanation/question, and job handlers return when
+  no paper is open. `audience=` (from `paratext read --audience`) applies to the session without being saved.
   Config: all windows share one `Config`; `open_setup` loads the file fresh and `adopt_config` updates the
   shared object in place; `_save_config` re-reads the file and writes only default provider, audience and
   `allow_web`. Visible pages plus the next one are requested as you scroll; "Explain whole paper"
@@ -161,7 +170,8 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   `ReaderWindow.open_in_new_window` opens a linked PDF in a second window kept in `_child_windows`. Tests get an
   isolated links file (and `PARATEXT_UI_STATE`) from an autouse conftest fixture.
   Every window has its own `LinkStore`, so each call re-reads the file when its mtime/size changed (`_fresh`)
-  before changing it. `adopt(hash, path, title)` moves entries recorded for the same path under an older hash
+  before changing it. Public methods run under the module's `_LOCK` (an RLock shared by every store in the
+  process: describe jobs write from worker threads) and saves go through a unique `mkstemp` file. `adopt(hash, path, title)` moves entries recorded for the same path under an older hash
   (title must match when both have one) to the new hash; a link already there wins. `remove` also clears a
   back-link left under a linked PDF's older hash.
 - **`issues.py`**: the reader's "Log an issue" box. `log_issue(note, IssueContext, provider)` always appends the
@@ -178,7 +188,9 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
 - **`config.py`**: TOML at `$PARATEXT_CONFIG` or `~/.config/paratext/config.toml`; the cache is at
   `$PARATEXT_CACHE_DIR` or `~/.cache/paratext`. `allow_web` (written only when true) is the web-search permission. A missing config means offline mode. `Config.save()` writes the
   file (0600, comments dropped; `tomli-w`); the window saves on provider/audience changes. `paratext config --init`
-  writes a commented template.
+  writes a commented template. A file that is not valid TOML raises `ConfigError` (via `read_toml`, also used by
+  `UserProfile.load`); the CLI prints it, and `reader.run` shows it and starts without those settings, while
+  `_save_config` reports it and leaves the file alone.
 
 ## Architecture (legacy widget, `widget.ParaText`)
 
@@ -205,5 +217,8 @@ old text's tags, then deletes the old range. Right-click is Button-2 on macOS (a
   the clip; check with native fonts by showing the widget with `WA_DontShowOnScreen` and `grab()`.
 - In a widget that can be deleted, don't defer work with `QTimer.singleShot(0, bound_method)`: it can fire
   after the object is gone. Use a `QTimer` owned by the widget.
+- Shared JSON files (the cache, `links.json`) are written from several threads and windows. Serialize copies
+  taken under the lock (not the live dicts), write through a unique temporary file, and hold a process-wide
+  lock around read-modify-write. A shared `path.with_suffix(".tmp")` made concurrent saves fail.
 - Anthropic model IDs and API shapes come from the `claude-api` skill (cached 2026-10). Check the skill again before
   changing `AnthropicProvider`; don't rely on memory.

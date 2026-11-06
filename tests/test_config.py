@@ -73,3 +73,17 @@ def test_web_permission_round_trip(tmp_path):
     config.allow_web = False
     config.save()
     assert "allow_web" not in path.read_text() and Config.load(path).allow_web is False
+
+
+def test_invalid_toml_names_the_file(tmp_path):
+    from paratext.config import ConfigError
+    from paratext.profile import UserProfile
+
+    bad = tmp_path / "config.toml"
+    bad.write_text("audience = \n")
+    with pytest.raises(ConfigError, match="config.toml is not valid TOML"):
+        Config.load(bad)
+    profile = tmp_path / "profile.toml"
+    profile.write_text("known = [\n")
+    with pytest.raises(ConfigError, match="profile.toml"):
+        UserProfile.load(profile)

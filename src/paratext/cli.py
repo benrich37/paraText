@@ -7,7 +7,7 @@ import json
 import sys
 
 from paratext.ai.providers import PRESETS, ProviderError, make_provider, preset_status
-from paratext.config import Config, default_config_path, write_template
+from paratext.config import Config, ConfigError, default_config_path, write_template
 from paratext.engine import ContextEngine, ImmediateExecutor
 from paratext.glossary import find_spans
 
@@ -51,7 +51,7 @@ def _engine(args, config: Config) -> ContextEngine:
 def cmd_read(args, config: Config) -> int:
     from paratext.reader import run
 
-    run(args.pdf, args.provider, args.config)
+    run(args.pdf, args.provider, args.config, audience=args.audience)
     return 0
 
 
@@ -275,18 +275,35 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("config", help="show or create the config file")
     p.add_argument("--init", action="store_true", help="write a commented template config")
     p.set_defaults(func=cmd_config)
+    parser.command_names = tuple(sub.choices)
     return parser
+
+
+def _default_to_read(argv: list[str], commands) -> list[str]:
+    """``paratext paper.pdf`` and plain ``paratext`` mean ``paratext read …``: add the command when none is given."""
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--config":
+            i += 2
+        elif arg.startswith("--config="):
+            i += 1
+        elif arg.startswith("-") or arg in commands:  # -h/--help, or a command already given
+            return argv
+        else:
+            return [*argv[:i], "read", *argv[i:]]
+    return [*argv, "read"]
 
 
 def main(argv=None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
-    if not args.command:
-        args = parser.parse_args(["read", *(argv or sys.argv[1:])])
-    config = Config.load(args.config)
+    argv = list(sys.argv[1:] if argv is None else argv)
+    args = parser.parse_args(_default_to_read(argv, parser.command_names))
     try:
-        return args.func(args, config)
-    except ProviderError as e:
+        if args.func is cmd_read:  # the reader reports a broken settings file itself and starts anyway
+            return args.func(args, Config())
+        return args.func(args, Config.load(args.config))
+    except (ProviderError, ConfigError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
 

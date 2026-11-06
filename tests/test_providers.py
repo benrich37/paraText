@@ -427,3 +427,47 @@ def test_anthropic_web_tools_and_pause_turn(monkeypatch):
     monkeypatch.setattr(p, "_client", lambda anthropic, timeout=None: client2)
     p.complete("sys", "question")
     assert "tools" not in messages.kwargs
+
+
+def test_command_provider_sends_utf8_whatever_the_locale(tmp_path):
+    # paper text is full of Greek letters and symbols; with the locale's encoding (cp1252 on Windows, Latin-1
+    # elsewhere) the prompt could not be written and the job failed with UnicodeEncodeError, not ProviderError
+    echo = tmp_path / "echo.py"
+    echo.write_text("import sys\nsys.stdout.buffer.write(sys.stdin.buffer.read())\n")
+    p = CommandProvider(command=[sys.executable, str(echo)])
+    text = "Tafel slope 118 mV dec⁻¹ at η = 0.3 V on α-MnO₂ (ΔG‡)"
+    assert p.complete("system", text).endswith(text)
+
+
+def test_command_provider_reports_a_command_it_cannot_run(tmp_path):
+    script = tmp_path / "not-executable"
+    script.write_text("#!/bin/sh\necho hi\n")
+    script.chmod(0o644)
+    with pytest.raises(ProviderError):
+        CommandProvider(command=[str(script)]).complete("s", "p")
+
+
+def test_anthropic_resumes_a_turn_paused_twice(monkeypatch):
+    # every paused part of the turn goes back: sending only the latest part lost the searches already run
+    pytest.importorskip("anthropic")
+    first = SimpleNamespace(
+        stop_reason="pause_turn", stop_details=None, content=[SimpleNamespace(type="text", text="One. ")]
+    )
+    second = SimpleNamespace(
+        stop_reason="pause_turn", stop_details=None, content=[SimpleNamespace(type="text", text="Two. ")]
+    )
+    responses = [first, second, text_response("Done.")]
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        return responses[len(calls) - 1]
+
+    client = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
+    p = AnthropicProvider()
+    monkeypatch.setattr(p, "_client", lambda anthropic, timeout=None: client)
+    assert p.complete("sys", "question", web=True) == "One. Two. Done."
+    assert calls[2]["messages"] == [
+        {"role": "user", "content": "question"},
+        {"role": "assistant", "content": first.content + second.content},
+    ]

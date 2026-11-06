@@ -1,6 +1,6 @@
 # Roadmap and open items
 
-Ordered by priority. Update this file when you finish or discover something. Status as of 2026-11-05. Also check `ReportedIssues.md` for issues logged from the reader.
+Ordered by priority. Update this file when you finish or discover something. Status as of 2026-11-06. Also check `ReportedIssues.md` for issues logged from the reader.
 
 ## Next up (verify what exists)
 
@@ -91,6 +91,16 @@ Ordered by priority. Update this file when you finish or discover something. Sta
 21. The side panel's minimum width is about 610 px with macOS fonts (measured 2026-11-05). It is set by the six
     link buttons in one row ("Link PDF…" … "Unlink"); the "Log an issue…" label (about 400 px) is next. Two rows
     of buttons, or a "Link…" menu, and a wrapped label would let the panel go to about 320 px.
+
+## Found in the 2026-11-06 code scan, not fixed (minor)
+
+22. - Results of an engine the window replaced still reach the window: after a provider change, an explanation
+      from the old provider can show with the new provider's footer, and status messages name the new one.
+    - Asking a second question while the first is pending hides the first answer until it is picked from the
+      history list.
+    - Options before a bare PDF (`paratext --provider x paper.pdf`) still need `read`.
+    - Password-protected PDFs are not detected (pages render blank, no words).
+    - The legacy tkinter widget (`widget.py`, `textutils.py`, `bst.py`) was not reviewed.
 
 ## Bigger ideas
 

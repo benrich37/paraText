@@ -52,13 +52,14 @@ class TermSpan:
 
 
 class _RenderSignals(QObject):
-    done = Signal(int, float, object)  # page, scale, QImage or None
+    done = Signal(int, float, object, int)  # page, scale, QImage or None, document generation
 
 
 class _RenderJob(QRunnable):
-    def __init__(self, doc: PdfDocument, page: int, scale: float, signals: _RenderSignals):
+    def __init__(self, doc: PdfDocument, page: int, scale: float, signals: _RenderSignals, generation: int = 0):
         super().__init__()
         self.doc, self.page, self.scale, self.signals = doc, page, scale, signals
+        self.generation = generation
 
     def run(self) -> None:
         try:
@@ -67,7 +68,7 @@ class _RenderJob(QRunnable):
             image = QImage(r.samples, r.width, r.height, r.stride, QImage.Format.Format_RGB888).copy()
         except Exception:  # the document may have been closed meanwhile
             image = None
-        self.signals.done.emit(self.page, self.scale, image)
+        self.signals.done.emit(self.page, self.scale, image, self.generation)
 
 
 class PageItem(QGraphicsItem):
@@ -210,7 +211,8 @@ class PixmapCache:
             return self.items[key]
         if key not in self.pending and self.view.doc is not None:
             self.pending.add(key)
-            self.view.pool.start(_RenderJob(self.view.doc, page, key[1], self.view.render_signals))
+            job = _RenderJob(self.view.doc, page, key[1], self.view.render_signals, self.view.generation)
+            self.view.pool.start(job)
         # fall back to any other scale (blurry until the right one arrives)
         candidates = [k for k in self.items if k[0] == page]
         if candidates:
@@ -249,6 +251,8 @@ class DocumentView(QGraphicsView):
         self.render_signals = _RenderSignals()
         self.render_signals.done.connect(self._render_done)
         self._current_page = 0
+        #: bumped for every document; a render started for an earlier one is dropped when it finishes
+        self.generation = 0
         #: "fit width" mode: re-fit on resize until the user zooms manually
         self.fit_mode = True
         self.setScene(QGraphicsScene(self))
@@ -266,6 +270,7 @@ class DocumentView(QGraphicsView):
     # ------------------------------------------------------------------
 
     def set_document(self, doc: PdfDocument | None) -> None:
+        self.generation += 1
         self.pool.clear()
         self.cache.clear()
         self.scene().clear()
@@ -294,7 +299,11 @@ class DocumentView(QGraphicsView):
     def page_item(self, page: int) -> PageItem:
         return self.items[page]
 
-    def _render_done(self, page: int, scale: float, image) -> None:
+    def _render_done(self, page: int, scale: float, image, generation: int = 0) -> None:
+        if generation != self.generation:
+            # a page of the previous document (it was rendering when another was opened): caching it would show
+            # it in place of the new document's page at the same number and scale
+            return
         if image is None or page >= len(self.items):
             self.cache.pending.discard((page, scale))
             return

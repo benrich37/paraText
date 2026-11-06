@@ -145,3 +145,45 @@ def test_stores_in_two_windows_do_not_overwrite_each_other(tmp_path):
     b.add("paper", two)
     assert [link.name for link in LinkStore(tmp_path / "links.json").links("paper")] == ["one.csv", "two.csv"]
     assert [link.name for link in a.links("paper")] == ["one.csv", "two.csv"]
+
+
+def test_concurrent_changes_keep_every_link(tmp_path):
+    # describe jobs write descriptions from worker threads while the window adds links; the store had no lock
+    # and every save used the same temporary file, so saves failed and a later re-read dropped unsaved links
+    import threading
+
+    store = LinkStore(tmp_path / "links.json")
+    paper = str(tmp_path / "paper.pdf")
+    files = []
+    for i in range(20):
+        f = tmp_path / f"data{i}.csv"
+        f.write_text("x")
+        files.append(f)
+        store.add("doc", f, "data", doc_path=paper)
+    errors = []
+
+    def describer(offset):
+        for rep in range(10):
+            for f in files[offset::2]:
+                try:
+                    store.set_description("doc", f, f"desc {rep}")
+                except Exception as e:  # noqa: BLE001  (any failure is the bug)
+                    errors.append(e)
+
+    def adder():
+        for rep in range(20):
+            f = tmp_path / f"extra{rep}.csv"
+            f.write_text("y")
+            try:
+                store.add("doc", f, "data", doc_path=paper)
+            except Exception as e:  # noqa: BLE001
+                errors.append(e)
+
+    threads = [threading.Thread(target=describer, args=(k,)) for k in (0, 1)] + [threading.Thread(target=adder)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert len(LinkStore(tmp_path / "links.json").links("doc")) == 40
+    assert not list(tmp_path.glob("*.tmp"))

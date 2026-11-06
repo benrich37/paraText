@@ -353,13 +353,19 @@ class SetupDialog(QDialog):
             else:
                 settings.pop("effort", None)
         if kind == "command":
-            settings["command"] = shlex.split(self.command_edit.text())
+            try:
+                settings["command"] = shlex.split(self.command_edit.text())
+            except ValueError as e:  # an unfinished quote, usually while it is being typed
+                raise ProviderError(f"The command has an unmatched quote ({e}).") from e
         return settings
 
     def _update_status(self, *_) -> None:
         if not self.selected_name:
             return
-        ready, message = preset_status(self.selected_name, self.current_settings())
+        try:
+            ready, message = preset_status(self.selected_name, self.current_settings())
+        except ProviderError as e:
+            ready, message = False, str(e)
         self.status_label.setText(("✓ " if ready else "○ ") + message)
         self.status_label.setStyleSheet("color: #2b8a3e;" if ready else "color: #c92a2a;")
         self.test_button.setEnabled(True)
@@ -372,7 +378,11 @@ class SetupDialog(QDialog):
         return make_provider(self.selected_name, self.current_settings())
 
     def fetch_models(self) -> None:
-        merged = {**self._merged(), **self.current_settings()}
+        try:
+            merged = {**self._merged(), **self.current_settings()}
+        except ProviderError as e:
+            self.result_label.setText(f"Not ready: {e}")
+            return
         if merged.get("kind") == "command":
             command = merged.get("command") or []
             self.result_label.setText("Asking the tool which models it can use (one short prompt per alias)…")
@@ -436,8 +446,8 @@ class SetupDialog(QDialog):
     def accept(self) -> None:
         if not self.selected_name:
             return
-        settings = self.current_settings()
         try:
+            settings = self.current_settings()
             make_provider(self.selected_name, settings)
         except ProviderError as e:
             self.result_label.setText(f"Cannot save yet: {e}")
