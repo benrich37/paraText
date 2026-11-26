@@ -11,10 +11,13 @@ paraText adds audience-targeted context to technical text. It has two parts:
 - **`ParaText` widget**: the original 2022 course project, kept as a legacy proof of concept. It is a `tk.Text`
   whose underlined spans offer right-click replacement options. Don't build new features on tkinter.
 
-**Read `notes/roadmap.md` (open items and what to do next), `notes/ReportedIssues.md` (issues the user logged
-from inside the reader while testing; address the ones with `Status: open` and update their status) and
-`notes/dev_log.md` (decisions and history) before starting work.** Add to the roadmap and dev log when you finish
-a chunk of work.
+**Read `notes/roadmap.md` (open items and what to do next), `notes/ReportedIssues.md` (open issues the user
+logged from inside the reader while testing) and `notes/dev_log.md` (decisions and history) before starting
+work.** Add to the roadmap and dev log when you finish a chunk of work. When you close an issue, set its status
+(`done` with the commit, or `wontfix` with the reason) and move the whole entry to the end of
+`notes/IssueHistory.md`, so `ReportedIssues.md` holds only open issues. Don't read `IssueHistory.md` unless you
+need to know how a past issue was resolved (a regression, or a report that repeats an old one); grep it rather
+than reading it whole.
 
 ## Commands
 
