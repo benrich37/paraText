@@ -123,6 +123,9 @@ class Config:
     path: Path | None = None
     #: the reader allows web search (cited papers, literature) for questions and "More depth"
     allow_web: bool = False
+    #: the provider the "Development AI" row runs on paraText's source, and the ponytail plugin level it gets
+    dev_provider: str | None = None
+    dev_ponytail: str = ""
 
     @classmethod
     def load(cls, path=None) -> Config:
@@ -143,6 +146,8 @@ class Config:
             cache_dir=Path(cache_dir).expanduser() if cache_dir else default_cache_dir(),
             path=path,
             allow_web=bool(data.get("allow_web", False)),
+            dev_provider=data.get("dev_provider") or None,
+            dev_ponytail=str(data.get("dev_ponytail", "")),
         )
 
     def save(self, path=None) -> Path:
@@ -159,6 +164,10 @@ class Config:
             data["cache_dir"] = str(self.cache_dir)
         if self.allow_web:
             data["allow_web"] = True
+        if self.dev_provider:
+            data["dev_provider"] = self.dev_provider
+        if self.dev_ponytail:
+            data["dev_ponytail"] = self.dev_ponytail
         if self.providers:
             data["providers"] = {
                 name: {k: v for k, v in s.items() if v is not None} for name, s in self.providers.items()

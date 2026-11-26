@@ -2,6 +2,32 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-26: the three reported issues of the day; closed issues move to IssueHistory.md
+
+- **Closed issues** now move from `ReportedIssues.md` to `IssueHistory.md` (the user's request), which sessions
+  read only when they need an old resolution, so the file read at every start holds only open issues. The rule is
+  in the issues file's header (`issues.HEADER`) and in CLAUDE.md. All 16 earlier issues were moved.
+- **Explanations on click.** Hover popups were in the way while reading. Click is now the default: the popup
+  comes with the click, next to the term (the side panel shows it too, as before). "Explain on hover" brings the
+  old behaviour back. The toggle is a checkbox in the side panel, not in the toolbar: the toolbar's first row
+  already needed 1219 px at the default 1200-px width (the last items fell behind the `>>` button), and the
+  toggle made that 1321. The audience box went from 260 to 220 px, so the row now needs 1181.
+- **Ask about selection.** A button next to "Ask" sends the question with the selected words and their passage
+  (`ContextEngine.ask(about=…)`). The whole paper still goes along, because the answer often lies elsewhere in it.
+  The whole-paper prompt is unchanged byte for byte, so `PROMPT_VERSION` was not bumped and existing caches stay
+  valid. The two buttons went under the box rather than beside it: beside it, they squeezed the box until its
+  placeholder wrapped and was cut off.
+- **Development AI** (second toolbar row). Chosen design: the agent is any command provider with `dev_args`, like
+  `web_args` for web search, so the setup dialog, models and effort levels are shared with the explaining AI and
+  a custom entry can give it a different model. claude-cli's `dev_args` are `--permission-mode auto`. Checked live
+  2026-11-26: a headless `claude -p --permission-mode auto` ran a Bash command, which `-p` otherwise denies.
+  `acceptEdits` would allow edits but not running the tests, and `bypassPermissions` approves everything. The
+  ponytail plugin's level goes in `PONYTAIL_DEFAULT_MODE`, the env var its hooks read first (found in its
+  `hooks/ponytail-config.js`; checked live: `lite` reached a `-p` session). The process is a `Popen` polled by
+  the window's own `QTimer`, not a `QProcess`, which kills its child when destroyed: closing the reader must not
+  stop an agent in the middle of an edit. The restart starts `python -m paratext … read <pdf>` in a new session
+  and closes every window.
+
 ## 2026-11-07: second pass over the code scan
 
 A re-read of the package, including the 2026-11-06 fixes, found these. Each was reproduced first and has a

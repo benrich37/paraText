@@ -161,9 +161,18 @@ def explain_prompt(
 
 
 def question_prompt(
-    paper_text: str, question: str, audience: str, truncated: bool = False, linked: str = "", web: bool = False
+    paper_text: str,
+    question: str,
+    audience: str,
+    truncated: bool = False,
+    linked: str = "",
+    web: bool = False,
+    selection: tuple[str, int, str] | None = None,
 ) -> str:
-    """A free-form question about the paper as a whole, answered from its full text (plus linked files)."""
+    """A free-form question answered from the paper's full text (plus linked files).
+
+    ``selection`` is ``(phrase, page_number, passage)`` when the question is about words the reader highlighted.
+    """
     note = (
         "(The paper is long, so only its first pages are included; say if the answer may lie in the rest.)\n\n"
         if truncated
@@ -179,12 +188,24 @@ def question_prompt(
         else ""
     )
     research = f"{WEB_RESEARCH_NOTE}\n\n" if web else ""
+    about = ""
+    if selection:
+        phrase, page_number, passage = selection
+        about = (
+            f'The question is about the words the reader highlighted on page {page_number}: "{phrase}", in this '
+            "passage:\n"
+            "<passage>\n"
+            f"{passage}\n"
+            "</passage>\n"
+            "Answer about those words, using the rest of the paper for context.\n\n"
+        )
     return (
         "<paper>\n"
         f"{paper_text}\n"
         "</paper>\n\n"
         f"{note}"
         f"{linked_block}"
+        f"{about}"
         "The reader asks the following question about this paper:\n"
         "<question>\n"
         f"{question}\n"
@@ -194,6 +215,19 @@ def question_prompt(
         "figure, table or page); where it does not, say that clearly rather than guessing. Distinguish what the "
         "paper shows from what it assumes or cites. Be concise: a short paragraph or a few sentences, or a short "
         "list if the question has several parts. Write plain text without headings or markdown."
+    )
+
+
+def dev_prompt(issues_file) -> str:
+    """The task of a Development AI session, which the reader starts in paraText's source checkout."""
+    return (
+        "This session was started from paraText's reader by the person testing it, and nobody can answer questions "
+        "while it runs. Read CLAUDE.md and the notes it lists. Then address every entry with Status: open in "
+        f"{issues_file} as CLAUDE.md describes: fix or build it, add a test, keep the test suite passing, set the "
+        "entry's status, move it to IssueHistory.md, and update the roadmap and dev log. Where an issue is "
+        "ambiguous, take the reading that fits the tester's note best and say which one you took. Do not commit or "
+        "push. The reader restarts after you finish, to load your changes. End with a short plain-text summary per "
+        "issue: what changed, and what the tester should check by hand after the restart."
     )
 
 

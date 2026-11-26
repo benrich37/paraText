@@ -1,9 +1,13 @@
 """The paraText reader window (Qt).
 
-- Underlined terms show an explanation when hovered; clicking one shows it in
-  the side panel, where "More depth" asks for a fuller explanation.
+- Clicking an underlined term pops up its explanation and shows it in the side
+  panel, where "More depth" asks for a fuller explanation ("Explain on hover"
+  pops it up on hover instead).
 - Dragging across words (or clicking one) selects a phrase; "Explain
-  selection" explains it in the context of the surrounding passage.
+  selection" explains it in the context of the surrounding passage, and "Ask
+  about selection" asks the question in the ask box about it.
+- The "Development AI" row runs a coding agent on the open reported issues in
+  the source checkout, and restarts the reader to load its changes.
 
 Engine callbacks arrive on worker threads and are re-emitted as Qt signals,
 which Qt delivers on the GUI thread.
@@ -14,6 +18,8 @@ from __future__ import annotations
 import html
 import logging
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import (
@@ -26,6 +32,7 @@ from PySide6.QtCore import (
     QSettings,
     Qt,
     QThreadPool,
+    QTimer,
     QUrl,
     Signal,
 )
@@ -54,9 +61,10 @@ from PySide6.QtWidgets import (
 
 from paratext.ai.providers import ProviderError
 from paratext.config import Config, ConfigError, default_config_path
+from paratext.dev import PONYTAIL_LEVELS, start_session
 from paratext.engine import ContextEngine
 from paratext.glossary import Span
-from paratext.issues import IssueContext, issues_path, log_issue
+from paratext.issues import IssueContext, issues_path, log_issue, repo_root
 from paratext.links import Link, LinkStore
 from paratext.pdf import PdfDocument
 from paratext.profile import UserProfile, default_profile_path
@@ -151,6 +159,8 @@ class ReaderWindow(QMainWindow):
         self.popup = ExplanationPopup()
         self.links = LinkStore()
         self._child_windows: list[ReaderWindow] = []
+        self._dev_proc: subprocess.Popen | None = None
+        self._dev_log: Path | None = None
         self._build_ui()
         self.view.viewport().installEventFilter(self)  # clicks, scrolling and keys dismiss the popup
         self._update_provider_ui()
@@ -226,7 +236,7 @@ class ReaderWindow(QMainWindow):
         bar.addWidget(self.setup_button)
         bar.addWidget(QLabel("  Explain for: "))
         self.audience_edit = QLineEdit(self.audience)
-        self.audience_edit.setMinimumWidth(260)
+        self.audience_edit.setMinimumWidth(220)  # the row fits a 1200-pixel window
         self.audience_edit.setPlaceholderText("who the explanations are for")
         self.audience_edit.editingFinished.connect(lambda: self.set_audience(self.audience_edit.text()))
         self.audience_edit.setCursorPosition(0)
@@ -235,6 +245,7 @@ class ReaderWindow(QMainWindow):
         self.profile_button.setToolTip("Tell the model what you know well and what needs careful explanation")
         self.profile_button.clicked.connect(self.open_profile)
         bar.addWidget(self.profile_button)
+        self._build_dev_bar()
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.view = DocumentView()
@@ -284,6 +295,13 @@ class ReaderWindow(QMainWindow):
         buttons.addWidget(self.explain_button)
         buttons.addWidget(self.depth_button)
         buttons.addStretch(1)
+        self.hover_check = QCheckBox("Explain on hover")
+        self.hover_check.setChecked(self._layout_settings().value("hover_explanations", False, type=bool))
+        self.hover_check.setToolTip(
+            "On: a term's explanation pops up when the pointer rests on it. Off: it pops up when you click the term."
+        )
+        self.hover_check.toggled.connect(self.set_hover_explanations)
+        buttons.addWidget(self.hover_check)
         pane.addLayout(buttons)
         self.side_splitter.addWidget(explain_pane)
 
@@ -334,21 +352,28 @@ class ReaderWindow(QMainWindow):
         self.side_splitter.setStretchFactor(0, 1)
         self.side_splitter.setSizes([420, 110, 150])
 
-        ask_label = QLabel("Ask about the paper as a whole:")
+        ask_label = QLabel("Ask about the paper:")
         ask_label.setStyleSheet("margin-top: 6px;")
         layout.addWidget(ask_label)
-        ask_row = QHBoxLayout()
         self.ask_edit = GrowingTextEdit(max_lines=4)
         self.ask_edit.setPlaceholderText(
             "e.g. does the paper show that X causes Y? (Enter asks; Shift+Enter starts a new line)"
         )
         self.ask_edit.submitted.connect(self.ask_question)
-        ask_row.addWidget(self.ask_edit, 1)
+        layout.addWidget(self.ask_edit)
         self.ask_button = QPushButton("Ask")
         self.ask_button.setToolTip("Sends the whole paper's text with your question, not just the current page")
         self.ask_button.clicked.connect(self.ask_question)
-        ask_row.addWidget(self.ask_button, 0, Qt.AlignmentFlag.AlignTop)
-        layout.addLayout(ask_row)
+        self.ask_selection_button = QPushButton("Ask about selection")
+        self.ask_selection_button.setToolTip(
+            "Ask the question about the words you selected; the whole paper is sent too, for context"
+        )
+        self.ask_selection_button.clicked.connect(self.ask_about_selection)
+        ask_buttons = QHBoxLayout()  # under the box, which keeps the panel's width for the question
+        ask_buttons.addStretch(1)
+        ask_buttons.addWidget(self.ask_button)
+        ask_buttons.addWidget(self.ask_selection_button)
+        layout.addLayout(ask_buttons)
         self.web_check = QCheckBox("Let the AI look up cited papers and search the web")
         self.web_check.setChecked(self.config.allow_web)
         self.web_check.toggled.connect(self.set_allow_web)
@@ -376,10 +401,83 @@ class ReaderWindow(QMainWindow):
         self.statusBar().showMessage("Open a PDF to start (Ctrl/⌘-O).")
         self.set_panel(
             "paraText",
-            "Hover over an underlined term for a quick explanation. Click a term for details, or drag across "
-            "any words and press “Explain selection”. Use the box below to ask about the paper as a whole.",
+            "Click an underlined term for its explanation (or turn on “Explain on hover”). Drag across any words "
+            "and press “Explain selection”, or type a question below and press “Ask about selection”. “Ask” "
+            "asks about the paper as a whole.",
         )
         self._update_buttons()
+
+    def _build_dev_bar(self) -> None:
+        """A second toolbar row: the Development AI, which works on the reported issues (only in a source checkout)."""
+        self.addToolBarBreak()
+        self.dev_bar = QToolBar("Development")
+        self.dev_bar.setMovable(False)
+        self.addToolBar(self.dev_bar)
+        self.dev_bar.addWidget(QLabel("Development AI: "))
+        self.dev_box = QComboBox()
+        self.dev_box.setMinimumWidth(140)
+        self.dev_box.currentTextChanged.connect(self._dev_box_changed)
+        self.dev_bar.addWidget(self.dev_box)
+        dev_setup = QPushButton("Set up AI…")
+        dev_setup.clicked.connect(lambda: self.open_setup(dev=True))
+        self.dev_bar.addWidget(dev_setup)
+        self.dev_bar.addWidget(QLabel("  Ponytail: "))
+        self.ponytail_box = QComboBox()
+        for level in PONYTAIL_LEVELS:
+            self.ponytail_box.addItem(level or "plugin default", level)
+        self.ponytail_box.setCurrentIndex(max(0, self.ponytail_box.findData(self.config.dev_ponytail)))
+        self.ponytail_box.setToolTip(
+            "Level of the ponytail Claude Code plugin (the smallest complete change) for the session; "
+            "it has no effect if the plugin is not installed"
+        )
+        self.ponytail_box.currentIndexChanged.connect(self._ponytail_changed)
+        self.dev_bar.addWidget(self.ponytail_box)
+        self.dev_button = QPushButton("Fix reported issues")
+        self.dev_button.setToolTip(
+            f"Runs the Development AI in {repo_root()} on the open issues in {issues_path()}. It edits the code and "
+            "runs the tests without asking (it does not commit); press again to stop it."
+        )
+        self.dev_button.clicked.connect(self.toggle_dev_session)
+        self.dev_bar.addWidget(self.dev_button)
+        self.restart_button = QPushButton("Restart paraText")
+        self.restart_button.setToolTip("Close paraText and reopen this paper, loading any code that changed")
+        self.restart_button.clicked.connect(self.restart)
+        self.dev_bar.addWidget(self.restart_button)
+        self.dev_bar.setVisible(repo_root() is not None)
+        self._dev_timer = QTimer(self)
+        self._dev_timer.setInterval(1000)
+        self._dev_timer.timeout.connect(self._poll_dev)
+        self._fill_dev_box()
+
+    def _dev_names(self) -> list[str]:
+        """Providers that can work on code: command-line agents with ``dev_args`` (built, not called)."""
+        names = []
+        for name in self.config.provider_names():
+            try:
+                provider = self.config.make_provider(name)
+            except ProviderError:
+                continue
+            if getattr(provider, "supports_dev", False):
+                names.append(name)
+        return names
+
+    def _fill_dev_box(self) -> None:
+        names = self._dev_names()
+        self.dev_box.blockSignals(True)
+        self.dev_box.clear()
+        self.dev_box.addItems(names or ["none"])
+        for name in (self.config.dev_provider, self.provider_name):
+            if name in names:
+                self.dev_box.setCurrentText(name)
+                break
+        self.dev_box.blockSignals(False)
+        self.dev_box.setEnabled(bool(names))
+        self.dev_box.setToolTip(
+            "The command-line agent that works on paraText's code"
+            if names
+            else "Nothing set up can work on code. Claude Code (claude-cli) can; other command-line tools need "
+            "'dev_args' in the config file."
+        )
 
     def _fill_provider_box(self) -> None:
         self.provider_box.blockSignals(True)
@@ -571,6 +669,8 @@ class ReaderWindow(QMainWindow):
             fresh.audience = self.config.audience
             fresh.cache_dir = self.config.cache_dir
             fresh.allow_web = self.config.allow_web
+            fresh.dev_provider = self.config.dev_provider
+            fresh.dev_ponytail = self.config.dev_ponytail
             fresh.save(self.config.path)
             self.config.providers = fresh.providers
             self.config.path = fresh.path
@@ -584,11 +684,14 @@ class ReaderWindow(QMainWindow):
         self.config.providers = config.providers
         self.config.cache_dir = config.cache_dir
         self.config.allow_web = config.allow_web
+        self.config.dev_provider = config.dev_provider
+        self.config.dev_ponytail = config.dev_ponytail
         self.config.path = config.path or self.config.path
         self.audience = self.config.audience
         self.audience_edit.setText(self.audience)
         self.audience_edit.setCursorPosition(0)
         self._fill_provider_box()
+        self._fill_dev_box()
 
     def set_allow_web(self, on: bool) -> None:
         """The reader's permission for web search (cited papers, literature) in questions and "More depth"."""
@@ -605,7 +708,8 @@ class ReaderWindow(QMainWindow):
         self._show_ai_settings()
         self._update_buttons()
 
-    def open_setup(self) -> None:
+    def open_setup(self, dev: bool = False) -> None:
+        """The AI setup dialog; ``dev`` sets up the Development AI instead of the one that explains."""
         # start from the file, not this window's copy, so settings saved elsewhere are shown and kept
         current = self.config
         if self.config.path and self.config.path.exists():
@@ -613,10 +717,12 @@ class ReaderWindow(QMainWindow):
                 current = Config.load(self.config.path)
             except ConfigError as e:
                 self.statusBar().showMessage(f"{e}; the dialog starts from this window's settings.")
-        dialog = SetupDialog(current, current=self.provider_name, parent=self)
+        name = self.dev_box.currentText() if dev else self.provider_name
+        dialog = SetupDialog(current, current=name, parent=self, dev=bool(dev))
         if dialog.exec():
             self.adopt_config(dialog.config)
-            self.set_provider(dialog.selected_name)
+            if not dev:
+                self.set_provider(dialog.selected_name)
 
     def open_profile(self) -> None:
         dialog = ProfileDialog(self.profile, parent=self)
@@ -756,9 +862,20 @@ class ReaderWindow(QMainWindow):
     # hover tooltips
     # ------------------------------------------------------------------
 
+    def set_hover_explanations(self, on: bool) -> None:
+        """Explanations pop up on hover (on) or only when a term is clicked (off, the default; reported issue)."""
+        settings = self._layout_settings()
+        settings.setValue("hover_explanations", bool(on))
+        settings.sync()
+        self.popup.hide()
+
     def _on_hover(self, page: int, term: TermSpan | None, screen_pos: QPoint) -> None:
         # Leaving a term keeps the popup open (it closes on click, scroll, Escape or another term).
-        if term is None or not self.engine:
+        if term is not None and self.hover_check.isChecked():
+            self._show_popup(page, term, "click for more")
+
+    def _show_popup(self, page: int, term: TermSpan, hint: str) -> None:
+        if not self.engine:
             return
         if term.kind == "explained":
             e = self._explained_record(page, term)
@@ -773,7 +890,7 @@ class ReaderWindow(QMainWindow):
             title, body, footer = entry.term, entry.explanation, self._footer(entry.source, entry)
         text = (
             f"<b>{html.escape(title)}</b><br>{html.escape(body)}"
-            f"<br><span style='color:#5c5f66'><i>{html.escape(footer)} · click for more</i></span>"
+            f"<br><span style='color:#5c5f66'><i>{html.escape(footer)} · {hint}</i></span>"
         )
         rect = self.view.term_viewport_rect(page, term)
         top_left = self.view.viewport().mapToGlobal(rect.topLeft())
@@ -841,6 +958,8 @@ class ReaderWindow(QMainWindow):
         self.unlink_button.setEnabled(selected)
         self.ask_edit.setEnabled(has_ai)
         self.ask_button.setEnabled(has_ai)
+        self.ask_selection_button.setEnabled(has_ai and self.view.selection() is not None)
+        self.dev_button.setEnabled(self._dev_proc is not None or self.dev_box.isEnabled())
         provider = self.engine.provider if self.engine else None
         if provider is None:
             self.web_check.setEnabled(False)
@@ -869,6 +988,8 @@ class ReaderWindow(QMainWindow):
         else:
             self._show_history()
         self._show_span(page, terms[0])
+        if not self.hover_check.isChecked():  # the popup comes with the click instead of on hover
+            self._show_popup(page, terms[0], "more in the side panel")
 
     def _explained_record(self, page: int, term: TermSpan) -> dict | None:
         return next(
@@ -917,7 +1038,7 @@ class ReaderWindow(QMainWindow):
         if not self.engine:
             return
         for q in reversed(self.engine.questions):
-            item = QListWidgetItem(f"Q: {q['question']}" + ("  🌐" if q.get("web") else ""))
+            item = QListWidgetItem(f"Q: {self._question_title(q)}" + ("  🌐" if q.get("web") else ""))
             item.setToolTip(q["answer"])
             item.setData(Qt.ItemDataRole.UserRole, ("question", q))
             self.history_list.addItem(item)
@@ -948,7 +1069,8 @@ class ReaderWindow(QMainWindow):
         if kind == "question":
             self.subject = None
             self.view.clear_selection()
-            self.set_panel(payload["question"], payload["answer"], self._footer("ai", web=bool(payload.get("web"))))
+            footer = self._footer("ai", web=bool(payload.get("web")))
+            self.set_panel(self._question_title(payload), payload["answer"], footer)
             self._update_buttons()
         elif kind == "span":
             page, term = payload
@@ -1138,21 +1260,44 @@ class ReaderWindow(QMainWindow):
 
     _pending_question: str | None = None
 
+    @staticmethod
+    def _question_title(q: dict) -> str:
+        """A question as the panel and the history list show it; one about selected words names them."""
+        if q.get("selection") is None:
+            return q["question"]
+        return f"{q['question']} (about “{q['selection']}”, page {q['page'] + 1})"
+
     def ask_question(self) -> None:
+        """Ask the question in the box about the paper as a whole."""
+        self._ask(None)
+
+    def ask_about_selection(self) -> None:
+        """Ask the question in the box about the selected words (reported issue: "Explain selection" may miss the
+        point the reader wants explained)."""
+        sel = self.view.selection()
+        if sel is not None:
+            self._ask(Subject(self.selected_text(), *sel))
+
+    def _ask(self, about: Subject | None) -> None:
         question = self.ask_edit.text().strip()
         if not question or not self.engine:
             return
         if not self.engine.provider:
             self.set_panel(question, "No AI provider selected. Choose one in the toolbar.")
             return
-        self.subject = None
-        self.view.clear_selection()
+        record = {"question": question}
+        if about is None:
+            self.subject = None
+            self.view.clear_selection()
+        else:  # the selection stays, for more questions about it
+            record.update(selection=about.phrase, page=about.page)
         self._pending_question = question
         web = self.engine.web_enabled
         reading = "Reading the whole paper and searching the literature…" if web else "Reading the whole paper…"
-        self.set_panel(question, reading)
+        self.set_panel(self._question_title(record), reading)
         self._update_buttons()
-        self.engine.ask(question, callback=self._signals.answered.emit)
+        where = None if about is None else (about.phrase, about.page, about.start, about.end)
+        self.engine.ask(question, callback=self._signals.answered.emit, about=where)
 
     def _on_answered(self, question: str, answer, error) -> None:
         if self._pending_question != question:
@@ -1162,9 +1307,71 @@ class ReaderWindow(QMainWindow):
             self.set_panel(question, f"Could not get an answer: {error}")
             return
         self.ask_edit.clear()
-        record = next((q for q in reversed(self.engine.questions) if q["answer"] == answer), {})
-        self.set_panel(question, answer, self._footer("ai", web=bool(record.get("web"))))
+        record = next((q for q in reversed(self.engine.questions) if q["answer"] == answer), None)
+        title = self._question_title(record) if record else question
+        self.set_panel(title, answer, self._footer("ai", web=bool(record and record.get("web"))))
         self._show_history()
+
+    # ------------------------------------------------------------------
+    # Development AI: a coding agent on the reported issues, then a restart
+    # ------------------------------------------------------------------
+
+    def _dev_box_changed(self, name: str) -> None:
+        if name and name != "none" and name != self.config.dev_provider:
+            self.config.dev_provider = name
+            self._save_config()
+
+    def _ponytail_changed(self, _index: int) -> None:
+        self.config.dev_ponytail = self.ponytail_box.currentData() or ""
+        self._save_config()
+
+    def toggle_dev_session(self) -> None:
+        """Start the Development AI on the open reported issues, or stop the one running."""
+        if self._dev_proc is not None:
+            self._dev_proc.terminate()
+            self.statusBar().showMessage("Stopping the Development AI…")
+            return
+        name = self.dev_box.currentText()
+        try:
+            provider = self.config.make_provider(name)
+            self._dev_proc, self._dev_log = start_session(provider, self.config.cache_dir, self.config.dev_ponytail)
+        except ProviderError as e:
+            self.statusBar().showMessage(f"Development AI: {e}")
+            return
+        self.dev_button.setText("Stop the Development AI")
+        self._dev_timer.start()
+        self.statusBar().showMessage(f"The Development AI ({name}) is working on the reported issues…")
+
+    def _poll_dev(self) -> None:
+        code = self._dev_proc.poll()
+        if code is None:
+            return
+        self._dev_timer.stop()
+        self._dev_proc = None
+        self.dev_button.setText("Fix reported issues")
+        output = self._dev_log.read_text(encoding="utf-8", errors="replace").strip()
+        status = "finished" if code == 0 else f"stopped (exit code {code})"
+        self.subject = None
+        self.set_panel(f"Development AI {status}", output or "(no output)", f"Full output: {self._dev_log}")
+        self.statusBar().showMessage(f"Development AI {status}. Press “Restart paraText” to load its changes.")
+        self._update_buttons()
+
+    def restart(self) -> None:
+        """Reopen this paper in a new paraText process (with the code as it is now on disk) and close this one."""
+        args = [sys.executable, "-m", "paratext"]
+        if self.config.path:
+            args += ["--config", str(self.config.path)]
+        args += ["read", "--provider", self.provider_name]
+        if self.audience != self.config.audience:
+            args += ["--audience", self.audience]
+        if self.doc:
+            args.append(str(self.doc.path))
+        try:
+            subprocess.Popen(args, start_new_session=True)
+        except OSError as e:
+            self.statusBar().showMessage(f"Could not restart paraText: {e}")
+            return
+        QApplication.closeAllWindows()
 
     # ------------------------------------------------------------------
     # issue log for testing sessions

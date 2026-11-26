@@ -452,29 +452,32 @@ class ContextEngine:
         items = sorted(f"{link.path}|{link.description}" for link in (self.linked_files() if links is None else links))
         return hashlib.sha1("\n".join(items).encode()).hexdigest()[:10] if items else ""
 
-    def cached_answer(self, question: str, web: bool | None = None) -> str | None:
-        """An earlier answer to the same question with the same linked files and web permission."""
-        record = self.question_record(question, web)
+    def cached_answer(self, question: str, web: bool | None = None, about: tuple | None = None) -> str | None:
+        """An earlier answer to the same question with the same linked files, web permission and selection."""
+        record = self.question_record(question, web, about)
         return record["answer"] if record else None
 
-    def question_record(self, question: str, web: bool | None = None) -> dict | None:
+    def question_record(self, question: str, web: bool | None = None, about: tuple | None = None) -> dict | None:
         key = self.question_key(question)
         fingerprint = self.links_fingerprint()
         web = self.web_enabled if web is None else web
+        where = (about[0], about[1]) if about else (None, None)
         with self._lock:
             for q in reversed(self.questions):
                 if (
                     self.question_key(q["question"]) == key
                     and q.get("links", "") == fingerprint
                     and bool(q.get("web")) == web
+                    and (q.get("selection"), q.get("page")) == where
                 ):
                     return q
         return None
 
-    def ask_job(self, question: str, web: bool = False) -> str:
+    def ask_job(self, question: str, web: bool = False, about: tuple | None = None) -> str:
         """Answer a free-form question from the whole paper's text and the linked files (blocking).
 
-        With ``web``, the provider may also look up the papers this one cites and search the literature.
+        With ``web``, the provider may also look up the papers this one cites and search the literature. ``about``
+        is ``(phrase, page, start, end)`` when the question is about words the reader highlighted.
         """
         if self.provider is None:
             raise ProviderError("No AI provider configured.")
@@ -482,11 +485,19 @@ class ContextEngine:
         links = self.linked_files()
         # fingerprint the files the prompt includes: a file linked while a (slow, web) answer is pending is not in it
         fingerprint = self.links_fingerprint(links)
-        prompt = prompts.question_prompt(text, question, self.audience, truncated, link_context(links), web=web)
+        selection = None
+        if about:
+            phrase, page, start, end = about
+            selection = (phrase, page + 1, self.doc.passage(page, start, end))
+        prompt = prompts.question_prompt(
+            text, question, self.audience, truncated, link_context(links), web=web, selection=selection
+        )
         answer = self._complete(prompt, web)
         record = {"question": question.strip(), "answer": answer, "links": fingerprint}
         if web:
             record["web"] = True
+        if about:
+            record["selection"], record["page"] = about[0], about[1]
         with self._lock:
             self.questions.append(record)
         self.save()
@@ -512,20 +523,23 @@ class ContextEngine:
         future.add_done_callback(lambda f: self._finish(key, f, callback, link))
         return future
 
-    def ask(self, question: str, callback: Callable | None = None) -> Future | None:
-        """Answer ``question`` about the paper; ``callback(question, answer, error)`` when done (at once if cached)."""
+    def ask(self, question: str, callback: Callable | None = None, about: tuple | None = None) -> Future | None:
+        """Answer ``question`` about the paper; ``callback(question, answer, error)`` when done (at once if cached).
+
+        ``about`` is ``(phrase, page, start, end)`` for a question about highlighted words.
+        """
         question = question.strip()
         web = self.web_enabled
-        cached = self.cached_answer(question, web)
+        cached = self.cached_answer(question, web, about)
         if cached is not None:
             if callback:
                 callback(question, cached, None)
             return None
-        key = ("ask", self.question_key(question), web)
+        key = ("ask", self.question_key(question), web, about)
         if key in self._pending:
             return None
         self._pending.add(key)
-        future = self.executor.submit(self.ask_job, question, web)
+        future = self.executor.submit(self.ask_job, question, web, about)
         future.add_done_callback(lambda f: self._finish(key, f, callback, question))
         return future
 

@@ -9,11 +9,13 @@ Scientists* project (2022; [original project](#the-original-paratext-widget-2022
 
 Open a PDF and paraText underlines the terms on each page that your chosen audience is likely to need explained:
 
-- **Hover** over an underlined term for a short explanation, in the sense the paper uses it. The popup stays
-  until you hover another term, click or scroll the page, or press Escape, so you can read or copy it.
-- **Click** a term to show it in the side panel; **More depth** asks for a fuller explanation.
+- **Click** an underlined term for a short explanation, in the sense the paper uses it: it pops up next to the
+  term and shows in the side panel, where **More depth** asks for a fuller explanation. The popup stays until you
+  click or scroll the page, or press Escape, so you can read or copy it. Tick **Explain on hover** (under the
+  explanation) to have it pop up when the pointer rests on a term instead; the choice is remembered.
 - **Drag** across any words and press **Explain selection** to have that phrase explained using the surrounding
-  passage.
+  passage, or type a question in the ask box and press **Ask about selection** for a pointed question about those
+  words (the whole paper goes along for context).
 - **Ask about the paper as a whole** in the box under the side panel ("does this paper show that X causes Y?").
   The box wraps and grows to four lines, then scrolls; Enter asks and Shift+Enter starts a new line.
   The question goes to the model with the full text of the paper, and the answer says where in the paper the
@@ -40,6 +42,11 @@ Open a PDF and paraText underlines the terms on each page that your chosen audie
   what was open at the time, to `notes/ReportedIssues.md` in the source checkout (or `~/.config/paratext/` for a
   non-editable install). The configured model adds a title and a short write-up. The file is a to-do list for
   development sessions.
+- **Development AI** (the toolbar's second row, shown only in a source checkout) runs a coding agent on the open
+  reported issues without leaving the reader: pick the agent (Claude Code, `claude -p --permission-mode auto`; set
+  it up like the explaining AI), the level of the ponytail plugin if you use it, and press **Fix reported issues**
+  (press again to stop). It edits the code and runs the tests without asking, but does not commit; its summary
+  shows in the side panel. **Restart paraText** then reopens the paper with the new code.
 - Change **Explain for:** (e.g. "a high-school student", "a chemist new to electrocatalysis") to retarget everything.
 - **Proofread** asks the current model to re-read each explained page and fix or drop explanations that got a
   term wrong (for example "Fe" read as an abbreviation rather than iron). Every explanation shows which tool,

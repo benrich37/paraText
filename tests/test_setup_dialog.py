@@ -13,9 +13,9 @@ from paratext.testing import FakeProvider
 
 @pytest.fixture
 def dialog_factory(qtbot, tmp_path):
-    def make(config=None, current=None):
+    def make(config=None, current=None, dev=False):
         config = config or Config(cache_dir=tmp_path / "cache", path=tmp_path / "config.toml")
-        dialog = SetupDialog(config, current=current)
+        dialog = SetupDialog(config, current=current, dev=dev)
         qtbot.addWidget(dialog)
         dialog.show()
         return dialog
@@ -195,6 +195,22 @@ def test_claude_cli_effort_and_model_check(dialog_factory, qtbot, monkeypatch):
         "low",
     ]
     QThreadPool.globalInstance().waitForDone()
+
+
+def test_development_ai_setup(dialog_factory, tmp_path, monkeypatch):
+    """From the Development AI row: no "Explain for", only agents that can edit code, saved as dev_provider."""
+    monkeypatch.setattr("shutil.which", lambda cmd: "/bin/" + cmd)
+    config = Config(cache_dir=tmp_path / "cache", path=tmp_path / "config.toml", default_provider="anthropic")
+    dialog = dialog_factory(config, current="codex-cli", dev=True)
+    assert dialog.audience_edit.isHidden()
+    dialog.accept()
+    assert dialog.result() != dialog.DialogCode.Accepted and "cannot work on code" in dialog.result_label.text()
+    dialog.select("claude-cli")
+    dialog.audience_edit.setText("someone else")
+    dialog.accept()
+    saved = Config.load(config.path)
+    assert saved.dev_provider == "claude-cli"
+    assert saved.default_provider == "anthropic" and saved.audience == config.audience
 
 
 def test_claude_cli_model_and_effort_round_trip(dialog_factory, tmp_path, monkeypatch):

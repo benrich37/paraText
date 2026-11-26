@@ -23,7 +23,7 @@ than reading it whole.
 
 ```sh
 .venv/bin/pip install -e ".[dev]"         # a project-local .venv (gitignored) was used during development
-python -m pytest                           # ~240 tests, ~10s; Qt tests run offscreen, Tk tests skip without a display
+python -m pytest                           # ~250 tests, ~12s; Qt tests run offscreen, Tk tests skip without a display
 python -m pytest tests/test_engine.py::test_cache_round_trip   # single test
 pre-commit run --all-files                 # check-yaml, end-of-file, trailing-whitespace, ruff (v0.6.4 pinned)
 ruff check . && ruff format .              # line length 120; rules pinned in pyproject (UP038 ignored)
@@ -93,10 +93,15 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   `web_search_20260209` (`max_uses` = `web_max_searches`) and `web_fetch_20260209`, and resumes `pause_turn` up to
   `MAX_CONTINUATIONS` times by sending the whole turn so far back (every paused part, not only the latest).
   codex/gemini have no `web_args` (unverified).
-  `web_args` is not in `cache_key`; the engine keys web answers itself.
+  `web_args` is not in `cache_key`; the engine keys web answers itself. `dev_args` (also not in `cache_key`;
+  `supports_dev`) are added for a Development AI session: claude-cli's are `--permission-mode auto`, which ran a
+  Bash command headless on 2026-11-26 (Claude Code 2.1.330). codex/gemini have none.
 - **`ai/prompts.py`**: all prompt text plus `PROMPT_VERSION`. Bump it when the wording changes; it is part of the
   cache key. `system_prompt(audience, reader_profile)` appends the profile paragraph. `WEB_RESEARCH_NOTE` is added
   to `question_prompt`/`explain_prompt` only when `web=True` (`explain_prompt` then also gets `<references>`).
+  `question_prompt(..., selection=(phrase, page_number, passage))` adds a block for a question about highlighted
+  words; without it the prompt is unchanged, so no `PROMPT_VERSION` bump. `dev_prompt(issues_file)` is the
+  Development AI's task (address the open issues per CLAUDE.md, no questions possible, no commit, summary).
 - **`profile.UserProfile`**: the reader's local profile (`background`, `specialties`, `known`, `needs_help`,
   `notes`), TOML at `$PARATEXT_PROFILE` or `~/.config/paratext/profile.toml`. `to_prompt()` is appended to the
   system prompt, `known` concepts are passed to the glossary prompt as needing no entry, and `fingerprint()` is
@@ -118,6 +123,9 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
     replaced while a job ran), adding what this engine lacks while its own entries win and terms proofreading
     removed (`_removed`) stay removed. It copies the data under `self._lock` before serializing and writes with
     `fileio.write_atomic`.
+  - Questions: `ask(question, callback, about=None)`; `about=(phrase, page, start, end)` asks about highlighted
+    words (the passage goes in the prompt, the whole paper still does too). Records then carry `selection` and
+    `page`, and `question_record` matches on them (whole-paper records have neither).
   - Web search: `allow_web` (the reader's checkbox) and `web_enabled` (also needs `provider.supports_web`). Only
     whole-paper questions and "More depth" use it. Question records carry `"web": true` and `cached_answer`
     matches on it; explanation keys become `detailed+web|page|phrase`, and `cached_explanation(..., web=None)`
@@ -135,7 +143,8 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   reports through the view's signals (`termHovered`, `termClicked` with the *list* of spans under the click,
   `selectionChanged`, `currentPageChanged`, `visiblePagesChanged`). The current page
   is the one with the largest visible area; `go_to` overrides it so navigation works when all pages fit.
-- **`reader/app.ReaderWindow`** (QMainWindow): toolbar, the view, and a side panel: the info bar for "no AI", a
+- **`reader/app.ReaderWindow`** (QMainWindow): toolbar (two rows; the second is the Development AI, shown only
+  when `repo_root()` finds a source checkout), the view, and a side panel: the info bar for "no AI", a
   vertical `side_splitter` with three panes (explanation: title/body/footer/buttons; history list; linked files),
   then the ask box, the web-search checkbox and the issue box, which size themselves. Both splitters' states are
   saved on close to `$PARATEXT_UI_STATE` or `~/.config/paratext/ui.ini` (`QSettings`, ini format). The ask and
@@ -155,17 +164,31 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   opens, without being saved.
   Config: all windows share one `Config`; `open_setup` loads the file fresh and `adopt_config` updates the
   shared object in place; `_save_config` re-reads the file and writes only default provider, audience and
-  `allow_web`. Visible pages plus the next one are requested as you scroll; "Explain whole paper"
-  queues every page. Hover explanations are `reader/popup.ExplanationPopup`, a frameless
-  `ToolTip`-type window with explicit colours that stays open until another term is hovered, the viewport gets
-  a click/wheel/key (event filter), Escape, or the window deactivates. `QToolTip` auto-hid after a second or so
-  (reported issue, 2026-11-04). `TOOLTIP_STYLE` still styles ordinary widget tooltips.
+  `allow_web`, plus the Development AI's `dev_provider` and `dev_ponytail`. Visible pages plus the next one are
+  requested as you scroll; "Explain whole paper" queues every page.
+  - Term explanations pop up in `reader/popup.ExplanationPopup` (`_show_popup`) when a term is clicked
+    (`show_term`), or on hover when the "Explain on hover" checkbox (`hover_check`, under the explanation; kept as
+    `hover_explanations` in ui.ini) is ticked. Click is the default (reported issue, 2026-11-26). The popup is a
+    frameless `ToolTip`-type window with explicit colours that stays open until another term is hovered, the
+    viewport gets a click/wheel/key (event filter), Escape, or the window deactivates. `QToolTip` auto-hid after a
+    second or so (reported issue, 2026-11-04). `TOOLTIP_STYLE` still styles ordinary widget tooltips.
+  - "Ask about selection" (under the ask box, next to "Ask"; enabled with a selection) sends the box's question
+    with `about=` the selection, which stays selected. `_question_title` names the words in the panel and history.
+  - Development AI row: a box of the providers whose `supports_dev` is true (`_dev_names` builds each without
+    calling it), "Set up AI…" (`open_setup(dev=True)`: `SetupDialog(dev=True)` hides "Explain for", refuses
+    providers that cannot edit code and saves `dev_provider` instead of `default_provider`), a ponytail level, "Fix
+    reported issues" (`toggle_dev_session`: `dev.start_session`; pressing again terminates it; a `QTimer` owned by
+    the window polls it and shows the log in the panel) and "Restart paraText" (`restart`: `python -m paratext
+    --config … read --provider … [--audience …] <pdf>` in a new session, then `closeAllWindows`).
+  - Row 1 must fit a 1200-pixel window (it needs 1181 px; the audience box is 220 px wide). Put new controls in the
+    side panel or the second row.
 - **`reader/setup.SetupDialog`**: list of options (presets grouped as subscription / API key / local, plus custom
   entries) with a readiness mark, a form whose rows and choices come from `provider_capabilities`, "Fetch
   models", "Send a test prompt" (both on `QThreadPool` with `_JobSignals`), and "Save and use", which validates
   with `make_provider` and writes the config. The result line is a read-only `textbox.ResultText` and the wrapped
   notes are `textbox.WrappedLabel`s (two reported issues, 2026-11-05: the test reply cut to "Success! The model",
-  and the description cut off at the bottom). The dialog opens at 900×700, which fits every preset's form. It edits
+  and the description cut off at the bottom). The dialog opens at 900×700, which fits every preset's form. With
+  `dev=True` it sets up the Development AI (see the reader window). It edits
   a deep copy of the config; the window adopts `dialog.config` on accept. `reader/profile_dialog.ProfileDialog`
   edits the reader profile the same way ("About you…" in the toolbar); the window saves it and rebuilds the
   engine. Its preview is a `ResultText` (eight lines, then scrolls) and its form uses `ExpandingFieldsGrow`.
@@ -190,6 +213,11 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   `~/.config/paratext/`; `$PARATEXT_ISSUES` overrides). With a provider it first asks for a JSON
   title/category/description (`prompts.issue_prompt`, `ISSUE_SCHEMA`); provider failures are noted in the entry,
   never raised. The window runs it on `QThreadPool` (`_IssueJob`) and reports in the status bar.
+- **`dev.py`**: `start_session(provider, log_dir, ponytail)` runs `provider.full_command() + dev_args` in
+  `repo_root()` with `prompts.dev_prompt(issues_path())` on stdin and stdout/stderr in
+  `log_dir/dev-session-<time>.log` (the window passes `cache_dir`). `ponytail` (one of `PONYTAIL_LEVELS`; blank =
+  the plugin's default) goes in `PONYTAIL_DEFAULT_MODE`, which the ponytail plugin's hooks read (checked live
+  2026-11-26). It is a plain `Popen`, not a `QProcess`: closing the reader does not kill an agent mid-edit.
 - **`macapp.py`**: writes the macOS bundle (`Info.plist` claiming `com.adobe.pdf` at rank Alternate, a shell
   launcher that `exec`s `sys.executable -m paratext read` with the installer's `PATH` baked in, output to
   `~/Library/Logs/paraText.log`, an icon drawn with QPainter + `iconutil`), then registers it with `lsregister`.
@@ -197,7 +225,7 @@ Data flows `pdf.py` → `glossary.py` / `ai/` → `engine.py` → `reader/` (and
   opens `QFileOpenEvent` files; the launcher passes no argv. Verified live on 2026-11-03 with `open -a`.
 - **`config.py`**: TOML at `$PARATEXT_CONFIG` or `~/.config/paratext/config.toml`; the cache is at
   `$PARATEXT_CACHE_DIR` or `~/.cache/paratext`. `allow_web` (written only when true) is the web-search
-  permission. A missing config means offline mode. `Config.save()` writes the file (0600, comments dropped;
+  permission; `dev_provider` and `dev_ponytail` (written only when set) are the Development AI's. A missing config means offline mode. `Config.save()` writes the file (0600, comments dropped;
   `tomli-w`); the window saves on provider/audience changes. `paratext config --init` writes a commented
   template.
   - A settings file that cannot be used raises `ConfigError`: not valid TOML or not UTF-8 (`read_toml`, also used

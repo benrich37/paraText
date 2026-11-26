@@ -269,6 +269,8 @@ class CommandProvider(Provider):
     effort_args: list[str] = field(default_factory=list)
     #: added when the reader allows web search, e.g. Claude Code's ``--tools WebSearch,WebFetch --allowedTools …``
     web_args: list[str] = field(default_factory=list)
+    #: added for a Development AI session (an agent that edits paraText's source), e.g. ``--permission-mode auto``
+    dev_args: list[str] = field(default_factory=list)
     timeout: float = 300.0
     #: timeout when web search is on (searching and reading cited papers takes a while)
     web_timeout: float = 900.0
@@ -299,6 +301,10 @@ class CommandProvider(Provider):
     @property
     def supports_web(self) -> bool:
         return bool(self.web_args)
+
+    @property
+    def supports_dev(self) -> bool:
+        return bool(self.dev_args)
 
     def full_command(self) -> list[str]:
         """The command with the model flag filled in."""
@@ -362,6 +368,8 @@ PRESETS: dict[str, dict] = {
         "effort_args": ["--effort", "{effort}"],
         # only web search and page fetching, pre-approved: `-p` denies tools that would ask (checked 2026-11-05)
         "web_args": ["--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch"],
+        # a classifier approves safe edits and commands without prompting (checked live 2026-11-26, 2.1.330)
+        "dev_args": ["--permission-mode", "auto"],
     },
     "codex-cli": {"kind": "command", "command": ["codex", "exec", "-"], "model_args": ["-m", "{model}"]},
     "gemini-cli": {"kind": "command", "command": ["gemini"], "model_args": ["-m", "{model}"]},

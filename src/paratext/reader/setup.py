@@ -69,9 +69,13 @@ class _Job(QRunnable):
 
 
 class SetupDialog(QDialog):
-    def __init__(self, config: Config, current: str | None = None, parent=None, pool: QThreadPool | None = None):
+    def __init__(
+        self, config: Config, current: str | None = None, parent=None, pool: QThreadPool | None = None, dev=False
+    ):
+        """``dev``: set up the Development AI (saved as ``dev_provider``; no "Explain for" row)."""
         super().__init__(parent)
-        self.setWindowTitle("Set up AI for paraText")
+        self.dev = dev
+        self.setWindowTitle("Set up the Development AI" if dev else "Set up AI for paraText")
         self.resize(900, 700)  # tall enough for every preset's notes, so switching does not resize it
         self.config = copy.deepcopy(config)
         self.pool = pool or QThreadPool.globalInstance()
@@ -173,6 +177,7 @@ class SetupDialog(QDialog):
 
         self.audience_edit = QLineEdit(self.config.audience)
         form.addRow("Explain for:", self.audience_edit)
+        form.setRowVisible(self.audience_edit, not self.dev)
 
         test_row = QHBoxLayout()
         self.test_button = QPushButton("Send a test prompt")
@@ -446,15 +451,21 @@ class SetupDialog(QDialog):
             return
         try:
             settings = self.current_settings()
-            make_provider(self.selected_name, settings)
+            provider = make_provider(self.selected_name, settings)
+            if self.dev and not getattr(provider, "supports_dev", False):
+                raise ProviderError(
+                    f"{self.selected_name} cannot work on code. Claude Code (claude-cli) can; other command-line "
+                    "tools need 'dev_args' in the config file."
+                )
         except ProviderError as e:
             self.result_label.setText(f"Cannot save yet: {e}")
             return
         self.config.providers[self.selected_name] = settings
-        self.config.default_provider = self.selected_name
-        audience = self.audience_edit.text().strip()
-        if audience:
-            self.config.audience = audience
+        if self.dev:
+            self.config.dev_provider = self.selected_name
+        else:
+            self.config.default_provider = self.selected_name
+            self.config.audience = self.audience_edit.text().strip() or self.config.audience
         try:
             self.config.save()
         except OSError as e:

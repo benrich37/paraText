@@ -1,8 +1,11 @@
 """GUI tests for the Qt PDF reader (run on Qt's offscreen platform, no display needed)."""
 
+import sys
+
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication
 
 from paratext.config import Config
 from paratext.engine import ImmediateExecutor
@@ -41,6 +44,15 @@ def word_point(window, page, index, dx):
     return window.view.mapFromScene(item.mapToScene(x, w.y0 + 2))
 
 
+def drag_select(window, page, start, end):
+    """Drag from the first to the last word, like the reader does."""
+    p0, p1 = word_point(window, page, start, -1), word_point(window, page, end, +1)
+    viewport = window.view.viewport()
+    QTest.mousePress(viewport, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p0)
+    QTest.mouseMove(viewport, p1)
+    QTest.mouseRelease(viewport, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p1)
+
+
 def test_terms_are_underlined(window_factory):
     window = window_factory(FakeProvider())
     keys = {t.span.key for t in window.view.page_item(0).spans}
@@ -50,9 +62,28 @@ def test_terms_are_underlined(window_factory):
     assert not window.info_bar.isVisible()
 
 
+def test_explanations_pop_up_on_click_unless_hover_is_on(window_factory, qtbot):
+    """Reported issue (2026-11-26): explanations only on a click by default, with a toggle for hover."""
+    window = window_factory(FakeProvider())
+    assert not window.hover_check.isChecked()
+    term, point = term_point(window, 0, "limiting potential")
+    QTest.mouseMove(window.view.viewport(), point)
+    qtbot.waitUntil(lambda: window.view.page_item(0).hover_span is term)
+    assert not window.popup.isVisible()
+    QTest.mouseClick(window.view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, point)
+    assert window.popup.isVisible() and "<b>limiting potential</b>" in window.popup.text()
+    assert "more in the side panel" in window.popup.text() and window.panel_title.text() == "limiting potential"
+    # the toggle hides the popup and is remembered for the next window
+    window.hover_check.setChecked(True)
+    assert not window.popup.isVisible()
+    assert window_factory(FakeProvider()).hover_check.isChecked()
+
+
 def test_hover_shows_popup_that_stays_until_dismissed(window_factory, qtbot):
     window = window_factory(FakeProvider())
+    window.hover_check.setChecked(True)
     term, point = term_point(window, 0, "limiting potential")
+    QTest.mouseMove(window.view.viewport(), word_point(window, 0, 0, -1))  # an earlier test may have left it there
     QTest.mouseMove(window.view.viewport(), point)
     qtbot.waitUntil(lambda: window.popup.isVisible())
     assert window.view.page_item(0).hover_span is term
@@ -77,6 +108,7 @@ def test_hover_shows_popup_that_stays_until_dismissed(window_factory, qtbot):
 
 def test_acronym_popup_footer(window_factory, qtbot):
     window = window_factory(FakeProvider())
+    window.hover_check.setChecked(True)
     _, point = term_point(window, 0, "ORR")
     QTest.mouseMove(window.view.viewport(), point)
     qtbot.waitUntil(lambda: window.popup.isVisible())
@@ -124,11 +156,7 @@ def test_drag_select_and_explain(window_factory):
     window = window_factory(provider)
     words = [w.text for w in window.doc.words(0)]
     start = words.index("single-atom")
-    p0, p1 = word_point(window, 0, start, -1), word_point(window, 0, start + 1, +1)
-    viewport = window.view.viewport()
-    QTest.mousePress(viewport, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p0)
-    QTest.mouseMove(viewport, p1)
-    QTest.mouseRelease(viewport, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p1)
+    drag_select(window, 0, start, start + 1)
     assert window.selected_text() == "single-atom catalysts."
     assert window.view.selection() == (0, start, start + 1)
     assert window.explain_button.isEnabled()
@@ -270,6 +298,71 @@ def test_ask_about_whole_paper(window_factory):
     assert window.panel_body().startswith("No: it only computes")
 
 
+def test_ask_about_selection(window_factory):
+    """Reported issue (2026-11-26): a pointed question about the highlighted words, greyed out without a selection."""
+    provider = FakeProvider(explanation="Single metal atoms, each on its own.")
+    window = window_factory(provider)
+    assert not window.ask_selection_button.isEnabled()
+    start = [w.text for w in window.doc.words(0)].index("single-atom")
+    drag_select(window, 0, start, start + 1)
+    assert window.ask_selection_button.isEnabled()
+    window.ask_edit.setText("Are these atoms isolated?")
+    window.ask_selection_button.click()
+    prompt = provider.calls[-1]["prompt"]
+    assert 'highlighted on page 1: "single-atom catalysts."' in prompt and "<paper>" in prompt
+    title = "Are these atoms isolated? (about “single-atom catalysts.”, page 1)"
+    assert window.panel_title.text() == title and window.panel_body() == "Single metal atoms, each on its own."
+    assert window.history_list.item(0).text() == "Q: " + title
+    assert window.view.selection() == (0, start, start + 1)  # kept for another question about it
+    # asked again about the same words: the cached answer; about the whole paper: a new question
+    calls = len(provider.calls)
+    window.ask_edit.setText("Are these atoms isolated?")
+    window.ask_selection_button.click()
+    assert len(provider.calls) == calls
+    window.ask_edit.setText("Are these atoms isolated?")
+    window.ask_button.click()
+    assert len(provider.calls) == calls + 1 and "highlighted" not in provider.calls[-1]["prompt"]
+    assert window.panel_title.text() == "Are these atoms isolated?"
+    assert not window.ask_selection_button.isEnabled()  # a whole-paper question clears the selection
+
+
+def test_development_ai_row(qtbot, tmp_path, monkeypatch):
+    """Reported issue (2026-11-26): run a coding agent on the reported issues from the reader, then restart."""
+    agent = "import sys; print('fixed:', 'ReportedIssues.md' in sys.stdin.read())"
+    config = Config(cache_dir=tmp_path / "cache", path=tmp_path / "config.toml")
+    config.providers["agent"] = {"kind": "command", "command": [sys.executable, "-c", agent], "dev_args": ["--x"]}
+    config.save()  # provider entries come from the file whenever the window saves a setting
+    window = ReaderWindow(config, None, "none", executor=ImmediateExecutor())
+    qtbot.addWidget(window)
+    assert not window.dev_bar.isHidden()  # the tests run from the source checkout
+    names = [window.dev_box.itemText(i) for i in range(window.dev_box.count())]
+    assert names == ["agent", "claude-cli"]  # only agents that can edit code
+    window.dev_box.setCurrentText("claude-cli")
+    window.ponytail_box.setCurrentIndex(window.ponytail_box.findData("lite"))
+    saved = Config.load(config.path)
+    assert (saved.dev_provider, saved.dev_ponytail) == ("claude-cli", "lite")
+    window.dev_box.setCurrentText("agent")
+    window.dev_button.click()
+    assert window.dev_button.text() == "Stop the Development AI"
+    qtbot.waitUntil(lambda: window._dev_proc is None, timeout=30000)
+    assert window.panel_title.text() == "Development AI finished" and window.panel_body() == "fixed: True"
+    assert window.dev_button.text() == "Fix reported issues" and str(tmp_path / "cache") in window.panel_footer.text()
+    # pressing it again while it works stops it
+    config.providers["agent"]["command"] = [sys.executable, "-c", "import time; time.sleep(30)"]
+    config.save()
+    window.dev_button.click()
+    window.dev_button.click()
+    qtbot.waitUntil(lambda: window._dev_proc is None, timeout=30000)
+    assert window.panel_title.text().startswith("Development AI stopped")
+    # "Restart paraText" starts a fresh reader with this window's settings and closes the windows
+    started, closed = [], []
+    monkeypatch.setattr("paratext.reader.app.subprocess.Popen", lambda args, **kw: started.append(args))
+    monkeypatch.setattr(QApplication, "closeAllWindows", staticmethod(lambda: closed.append(True)))
+    window.restart()
+    assert started == [[sys.executable, "-m", "paratext", "--config", str(config.path), "read", "--provider", "none"]]
+    assert closed
+
+
 def test_ask_disabled_without_ai(window_factory):
     window = window_factory(None, provider_name="none")
     assert not window.ask_button.isEnabled() and not window.ask_edit.isEnabled()
@@ -393,6 +486,7 @@ def test_explained_selection_gets_second_underline_and_can_be_recalled(window_fa
     )
     assert len(provider.calls) == calls and window.depth_button.isEnabled()
     # hovering it shows the popup too
+    window.hover_check.setChecked(True)
     QTest.mouseMove(window.view.viewport(), word_point(window, 0, start, 0))
     qtbot.waitUntil(lambda: window.popup.isVisible())
     assert "Isolated metal atoms" in window.popup.text()

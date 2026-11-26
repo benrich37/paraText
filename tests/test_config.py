@@ -55,6 +55,7 @@ def test_save_round_trip(tmp_path):
     config.audience = "a curious teenager"
     config.providers["anthropic"] = {"preset": "anthropic", "api_key": "sk-secret", "model": "claude-opus-5-5"}
     config.providers["mine"] = {"kind": "command", "command": ["my-llm"], "timeout": 60.0}
+    config.dev_provider, config.dev_ponytail = "claude-cli", "lite"
     saved = config.save()
     assert saved == path
     if os.name != "nt":
@@ -65,6 +66,7 @@ def test_save_round_trip(tmp_path):
     assert again.providers == config.providers
     assert again.make_provider().api_key == "sk-secret"
     assert again.make_provider("mine").timeout == 60.0
+    assert (again.dev_provider, again.dev_ponytail) == ("claude-cli", "lite")
 
 
 def test_web_permission_round_trip(tmp_path):

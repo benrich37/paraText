@@ -1,11 +1,13 @@
 # Roadmap and open items
 
-Ordered by priority. Update this file when you finish or discover something. Status as of 2026-11-07. Also check `ReportedIssues.md` for issues logged from the reader.
+Ordered by priority. Update this file when you finish or discover something. Status as of 2026-11-26. Also check `ReportedIssues.md` for issues logged from the reader.
 
 ## Next up (verify what exists)
 
 0. **Look at the Qt reader and the setup dialog on screen** (`paratext read <pdf>`, `paratext setup`). Nothing
-   has been seen with human eyes yet; everything was verified offscreen. Check: toolbar layout on macOS, dark
+   has been seen with human eyes yet; everything was verified offscreen. (2026-11-26: a native-font grab of the
+   window showed that the "Set up AI…" button in the yellow "no AI" bar is unreadable in dark mode: light text on
+   the light bar.) Check: toolbar layout on macOS, dark
    mode, tooltip contrast, dialog field widths, that the "Fit width" zoom on open looks right on a Retina display.
 
 1. **Live-test each provider route with real accounts.** No live call has been made yet (see `dev_log.md`).
@@ -55,7 +57,8 @@ Ordered by priority. Update this file when you finish or discover something. Sta
     keeps a per-paper Q&A history in the side panel. This is the feature that will feed the profile.
     *Partly done 2026-11-03:* the "Ask about the paper as a whole" box (`ContextEngine.ask`, `paratext ask`)
     answers from the full text and stores the history in the cache file; the panel lists earlier questions under
-    the latest answer. Still to do: tie a question to the current selection/term, follow-up questions that see the
+    the latest answer. *2026-11-26:* "Ask about selection" ties a question to the selected words. Still to do: a
+    question about a clicked term (not only a selection), follow-up questions that see the
     previous answer, and a nicer history view than plain text. For Anthropic, prompt caching of the paper block
     would make repeated questions much cheaper (see item 7).
 16. **Inferred profile updates.** With each answer, request a structured side-channel of proposed profile
@@ -105,6 +108,18 @@ Ordered by priority. Update this file when you finish or discover something. Sta
       entry that is not a table is reported.
     - Password-protected PDFs are not detected (pages render blank, no words).
     - The legacy tkinter widget (`widget.py`, `textutils.py`, `bst.py`) was not reviewed.
+
+## Development AI (done 2026-11-26: `dev.py`, the toolbar's second row)
+
+23. Follow-ups. No real session has been run from the reader yet: start one on a small issue and check that the
+    summary shows, the log is written and "Restart paraText" comes back on the same paper (also from the macOS
+    app, where the restarted process inherits the launcher's environment).
+    - Two windows can each start a session on the same checkout; nothing stops the second.
+    - A session left running when the reader closes keeps going, and nothing reports it at the next start (its log
+      is in the cache folder).
+    - codex/gemini have no `dev_args` (`codex exec --full-auto`, `gemini --yolo` are candidates, unverified).
+    - Progress: only the button's "Stop" text shows that it is working. `--output-format stream-json` could feed
+      the panel live.
 
 ## Bigger ideas
 
