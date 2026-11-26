@@ -16,6 +16,7 @@ from paratext.ai.providers import (
     list_models,
     make_provider,
     preset_status,
+    probe_claude_models,
     provider_capabilities,
 )
 
@@ -36,6 +37,14 @@ def chat_server():
                 self.send_response(401)
                 self.end_headers()
                 self.wfile.write(b'{"error": "bad key"}')
+                return
+            if body["model"] == "dropped":  # the server goes away mid-request (a local server restarting)
+                self.close_connection = True
+                return
+            if body["model"] == "html":  # a proxy's error page with status 200
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"<html>Service unavailable</html>")
                 return
             reply = {"choices": [{"message": {"role": "assistant", "content": "hello from " + body["model"]}}]}
             data = json.dumps(reply).encode()
@@ -98,6 +107,15 @@ def test_openai_compatible_http_error(chat_server):
     p = OpenAICompatibleProvider(base_url=chat_server.url, model="broken")
     with pytest.raises(ProviderError, match="HTTP 401"):
         p.complete("sys", "hi")
+
+
+def test_openai_compatible_dropped_connection_or_html_reply(chat_server):
+    # a dropped connection raised RemoteDisconnected and an HTML page a JSONDecodeError, neither a ProviderError,
+    # so `paratext glossary` printed a traceback and the issue log lost its "never raises" promise
+    with pytest.raises(ProviderError, match="could not reach"):
+        OpenAICompatibleProvider(base_url=chat_server.url, model="dropped").complete("sys", "hi")
+    with pytest.raises(ProviderError, match="not JSON"):
+        OpenAICompatibleProvider(base_url=chat_server.url, model="html").complete("sys", "hi")
 
 
 def test_openai_compatible_missing_env_key(monkeypatch):
@@ -471,3 +489,14 @@ def test_anthropic_resumes_a_turn_paused_twice(monkeypatch):
         {"role": "user", "content": "question"},
         {"role": "assistant", "content": first.content + second.content},
     ]
+
+
+def test_unmatched_quote_in_a_configured_command():
+    # a string command with an unfinished quote in config.toml raised ValueError: the window could not open the
+    # paper (only ProviderError is caught there) and the setup dialog failed to build its list
+    with pytest.raises(ProviderError, match="unmatched quote"):
+        make_provider("mine", {"kind": "command", "command": "claude -p --append-system-prompt 'be brief"})
+    ready, message = preset_status("mine", {"kind": "command", "command": "claude 'x"})
+    assert not ready and "unmatched quote" in message
+    with pytest.raises(ProviderError, match="unmatched quote"):
+        probe_claude_models("claude 'x")

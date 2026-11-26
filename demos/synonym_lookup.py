@@ -13,7 +13,7 @@ WORDS_FILE = Path(__file__).parent / "data" / "words.txt"
 
 def load_synonyms(path=WORDS_FILE) -> BST:
     tree = BST()
-    for line in Path(path).read_text().splitlines():
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
         entries = [e.strip() for e in line.split(",") if e.strip()]
         if entries:
             tree.insert(entries[0], entries[1:])

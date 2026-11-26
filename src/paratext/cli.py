@@ -30,15 +30,23 @@ def parse_pages(spec: str | None, page_count: int) -> list[int]:
     return sorted(pages)
 
 
+def _open_pdf(path):
+    from paratext.pdf import PdfDocument
+
+    try:
+        return PdfDocument(path)
+    except Exception as e:  # missing, unreadable, or not a PDF: PyMuPDF raises several kinds
+        raise SystemExit(f"error: could not open {path}: {e}") from e
+
+
 def _engine(args, config: Config) -> ContextEngine:
     from paratext.links import LinkStore
-    from paratext.pdf import PdfDocument
     from paratext.profile import UserProfile
 
     provider = config.make_provider(args.provider)
     audience = args.audience or config.audience
     return ContextEngine(
-        PdfDocument(args.pdf),
+        _open_pdf(args.pdf),
         provider,
         config.cache_dir,
         audience,
@@ -116,9 +124,8 @@ def cmd_ask(args, config: Config) -> int:
 def cmd_links(args, config: Config) -> int:
     """List, add or remove files linked to a paper (SI PDFs, data, folders)."""
     from paratext.links import LinkStore
-    from paratext.pdf import PdfDocument
 
-    doc = PdfDocument(args.pdf)
+    doc = _open_pdf(args.pdf)
     store = LinkStore()
     try:
         moved = store.adopt(doc.sha256, doc.path, doc.title)
@@ -208,7 +215,7 @@ def cmd_config(args, config: Config) -> int:
     path = args.config or default_config_path()
     print(path)
     if config.path and config.path.exists():
-        print(config.path.read_text())
+        print(config.path.read_text(encoding="utf-8"))
     else:
         print("(no config file; run `paratext config --init`)")
     return 0
@@ -280,19 +287,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _default_to_read(argv: list[str], commands) -> list[str]:
-    """``paratext paper.pdf`` and plain ``paratext`` mean ``paratext read …``: add the command when none is given."""
+    """``paratext paper.pdf`` (or ``paratext --provider x paper.pdf``, or plain ``paratext``) means ``paratext read``.
+
+    The command comes right after the global ``--config`` option; when anything else is there, ``read`` is inserted.
+    """
     i = 0
-    while i < len(argv):
-        arg = argv[i]
-        if arg == "--config":
-            i += 2
-        elif arg.startswith("--config="):
-            i += 1
-        elif arg.startswith("-") or arg in commands:  # -h/--help, or a command already given
-            return argv
-        else:
-            return [*argv[:i], "read", *argv[i:]]
-    return [*argv, "read"]
+    while i < len(argv) and argv[i].startswith("--config"):
+        i += 1 if "=" in argv[i] else 2
+    if i > len(argv) or (i < len(argv) and argv[i] in (*commands, "-h", "--help")):
+        return argv  # a command is given, top-level help, or --config is missing its value: argparse says so
+    return [*argv[:i], "read", *argv[i:]]
 
 
 def main(argv=None) -> int:

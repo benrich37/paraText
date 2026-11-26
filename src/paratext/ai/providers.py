@@ -67,6 +67,16 @@ class Provider:
         return self.cache_key
 
 
+def split_command(command: list[str] | str) -> list[str]:
+    """A command as a list; a string is split like a shell would, and an unmatched quote is a ProviderError."""
+    if not isinstance(command, str):
+        return list(command)
+    try:
+        return shlex.split(command)
+    except ValueError as e:  # e.g. an unfinished quote, typed in the setup dialog or the config file
+        raise ProviderError(f"The command {command!r} has an unmatched quote.") from e
+
+
 def _resolve_api_key(api_key: str | None, api_key_env: str | None, required: bool) -> str | None:
     if api_key:
         return api_key
@@ -128,8 +138,10 @@ class OpenAICompatibleProvider(Provider):
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="replace")[:500]
             raise ProviderError(f"{self.name}: HTTP {e.code} from {url}: {detail}") from e
-        except (urllib.error.URLError, TimeoutError) as e:
+        except OSError as e:  # unreachable, timed out, connection dropped (a local server restarting), TLS
             raise ProviderError(f"{self.name}: could not reach {url}: {e}") from e
+        except ValueError as e:  # not JSON (or not UTF-8), e.g. a proxy's HTML page
+            raise ProviderError(f"{self.name}: the reply from {url} is not JSON: {e}") from e
         try:
             content = payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as e:
@@ -263,8 +275,7 @@ class CommandProvider(Provider):
     name: str = "command"
 
     def __post_init__(self):
-        if isinstance(self.command, str):
-            self.command = shlex.split(self.command)
+        self.command = split_command(self.command)
         if not self.command:
             raise ProviderError(f"Provider {self.name!r} needs a 'command' setting.")
         if self.prompt_via not in ("stdin", "arg"):
@@ -553,8 +564,7 @@ def probe_claude_models(command: list[str] | str, timeout: float = 120.0) -> dic
     Returns ``{alias: model_id}`` for the aliases the signed-in account can use (others are left out).
     ``command`` is the configured command (``["claude", "-p"]`` plus any extra flags).
     """
-    if isinstance(command, str):
-        command = shlex.split(command)
+    command = split_command(command)
     if not command or shutil.which(command[0]) is None:
         raise ProviderError(f"`{command[0] if command else 'claude'}` is not installed (or not on your PATH).")
     base = [a for a in command if a != "-p"]
@@ -600,9 +610,10 @@ def preset_status(name: str, settings: dict | None = None) -> tuple[bool, str]:
     merged.update(settings or {})
     kind = merged.get("kind")
     if kind == "command":
-        command = merged.get("command") or []
-        if isinstance(command, str):
-            command = shlex.split(command)
+        try:
+            command = split_command(merged.get("command") or [])
+        except ProviderError as e:
+            return False, str(e)
         if not command:
             return False, "No command set."
         if shutil.which(command[0]) is None:
@@ -634,8 +645,10 @@ def list_models(base_url: str, api_key: str | None = None, timeout: float = 15.0
             payload = json.loads(response.read().decode())
     except urllib.error.HTTPError as e:
         raise ProviderError(f"HTTP {e.code} from {url}: {e.read().decode(errors='replace')[:300]}") from e
-    except (urllib.error.URLError, TimeoutError) as e:
+    except OSError as e:
         raise ProviderError(f"Could not reach {url}: {e}") from e
+    except ValueError as e:
+        raise ProviderError(f"The reply from {url} is not JSON: {e}") from e
     items = payload.get("data", payload) if isinstance(payload, dict) else payload
     ids = [m.get("id") for m in items if isinstance(m, dict) and m.get("id")] if isinstance(items, list) else []
     return sorted(ids)

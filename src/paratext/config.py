@@ -20,6 +20,7 @@ else:  # pragma: no cover
 
 from paratext.ai.prompts import DEFAULT_AUDIENCE
 from paratext.ai.providers import PRESETS, Provider, ProviderError, make_provider
+from paratext.fileio import write_atomic
 
 CONFIG_TEMPLATE = """\
 # paraText configuration.  Pick one provider as the default; any [providers.*]
@@ -84,10 +85,25 @@ def read_toml(path: Path) -> dict:
     try:
         with open(path, "rb") as f:
             return tomllib.load(f)
-    except tomllib.TOMLDecodeError as e:
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:  # TOML must be UTF-8; tomllib lets that error out
         raise ConfigError(f"{path} is not valid TOML: {e}") from e
     except OSError as e:
         raise ConfigError(f"Could not read {path}: {e}") from e
+
+
+def write_settings(path: Path, text: str) -> None:
+    """Replace a settings file (config or reader profile) with ``text``.
+
+    A file there that is not valid TOML (hand-edited, with a typo) is kept as ``NAME.broken`` rather than lost: the
+    reader starts without such a file, and saving from its dialogs would otherwise replace the user's text.
+    """
+    path = Path(path)
+    if path.exists():
+        try:
+            read_toml(path)
+        except ConfigError:
+            os.replace(path, path.with_name(path.name + ".broken"))
+    write_atomic(path, text)
 
 
 def default_config_path() -> Path:
@@ -115,11 +131,15 @@ class Config:
         if not path.exists():
             return cls(path=path)
         data = read_toml(path)
+        providers = data.get("providers", {})
+        if not isinstance(providers, dict) or not all(isinstance(v, dict) for v in providers.values()):
+            # e.g. `claude-cli = "claude -p"` under [providers]: valid TOML that failed later, opening a paper
+            raise ConfigError(f'{path}: each provider needs its own table, e.g. [providers.claude-cli] preset = "…"')
         cache_dir = data.get("cache_dir")
         return cls(
             default_provider=data.get("default_provider") or None,
             audience=data.get("audience") or DEFAULT_AUDIENCE,
-            providers=dict(data.get("providers", {})),
+            providers=dict(providers),
             cache_dir=Path(cache_dir).expanduser() if cache_dir else default_cache_dir(),
             path=path,
             allow_web=bool(data.get("allow_web", False)),
@@ -128,7 +148,7 @@ class Config:
     def save(self, path=None) -> Path:
         """Write the config as TOML (comments are not preserved).
 
-        The file is made private (0600) because it may hold API keys.
+        The file is private (0600) because it may hold API keys; see :func:`write_settings`.
         """
         path = Path(path) if path else (self.path or default_config_path())
         data = {}
@@ -143,14 +163,7 @@ class Config:
             data["providers"] = {
                 name: {k: v for k, v in s.items() if v is not None} for name, s in self.providers.items()
             }
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(tomli_w.dumps(data))
-        try:
-            os.chmod(tmp, 0o600)
-        except OSError:  # pragma: no cover - e.g. unusual filesystems
-            pass
-        os.replace(tmp, path)
+        write_settings(path, tomli_w.dumps(data))
         self.path = path
         return path
 
@@ -174,5 +187,5 @@ def write_template(path=None, audience: str = DEFAULT_AUDIENCE) -> Path:
     if path.exists():
         raise FileExistsError(f"{path} already exists")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(CONFIG_TEMPLATE.format(audience=audience))
+    path.write_text(CONFIG_TEMPLATE.format(audience=audience), encoding="utf-8")
     return path

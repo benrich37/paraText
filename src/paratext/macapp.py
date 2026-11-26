@@ -153,7 +153,7 @@ def build_app(dest: Path | None = None, python: str | None = None, path_env: str
     (contents / "Resources").mkdir()
 
     launcher = contents / "MacOS" / EXECUTABLE
-    launcher.write_text(LAUNCHER.format(path=_shell_quote(path_env), python=_shell_quote(python)))
+    launcher.write_text(LAUNCHER.format(path=_shell_quote(path_env), python=_shell_quote(python)), encoding="utf-8")
     launcher.chmod(0o755)
 
     have_icon = False
@@ -164,7 +164,7 @@ def build_app(dest: Path | None = None, python: str | None = None, path_env: str
             shutil.rmtree(contents / "Resources" / "_iconbuild", ignore_errors=True)
     with open(contents / "Info.plist", "wb") as f:
         plistlib.dump(info_plist(have_icon), f)
-    (contents / "PkgInfo").write_text("APPL????")
+    (contents / "PkgInfo").write_text("APPL????", encoding="ascii")
     return dest
 
 

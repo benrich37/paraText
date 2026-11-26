@@ -608,3 +608,53 @@ def test_read_audience_applies_to_the_session(qtbot, tmp_path):
     qtbot.addWidget(window)
     assert window.audience == "a chemist" and window.audience_edit.text() == "a chemist"
     assert config.audience != "a chemist"  # not saved unless typed in the toolbar box
+
+
+def test_broken_settings_files_are_kept(qtbot, tmp_path, monkeypatch):
+    # The reader started with Config(path=None) after a broken config: a toolbar change then wrote the default
+    # config (the wrong file, with --config), and saving from a dialog replaced the hand-edited file
+    from paratext.reader.app import load_settings
+
+    default = tmp_path / "default.toml"
+    monkeypatch.setenv("PARATEXT_CONFIG", str(default))
+    monkeypatch.setenv("PARATEXT_CACHE_DIR", str(tmp_path / "cache"))
+    config_path, profile_path = tmp_path / "mine.toml", tmp_path / "profile.toml"
+    monkeypatch.setenv("PARATEXT_PROFILE", str(profile_path))
+    config_path.write_text('default_provider = "claude-cli\n', encoding="utf-8")
+    profile_path.write_text('background = "a chemist\n', encoding="utf-8")
+    config, profile, warnings = load_settings(config_path)
+    assert len(warnings) == 2
+    assert "mine.toml is not valid TOML" in warnings[0] and "mine.toml.broken" in warnings[0]
+    assert "profile.toml.broken" in warnings[1]
+    assert config.path == config_path and profile.path == profile_path
+
+    window = ReaderWindow(config, None, "none", profile=profile)
+    qtbot.addWidget(window)
+    window.set_provider("claude-cli", save=True)
+    assert "Could not save settings" in window.statusBar().currentMessage()
+    assert config_path.read_text(encoding="utf-8") == 'default_provider = "claude-cli\n'
+    assert not default.exists()
+    profile.save()  # "About you…" > Save: the old file is kept beside the new one
+    assert (tmp_path / "profile.toml.broken").read_text(encoding="utf-8") == 'background = "a chemist\n'
+
+
+def test_linked_pdf_window_keeps_the_session_audience(window_factory, tmp_path):
+    window = window_factory(FakeProvider())
+    window.audience = "a chemist"  # as `paratext read --audience` sets it, without saving it
+    other = make_sample_pdf(tmp_path / "si.pdf")
+    child = window.open_in_new_window(other)
+    assert child.audience == "a chemist" and child.engine.audience == "a chemist"
+    child.close()
+
+
+def test_profile_that_cannot_be_saved_says_so(window_factory, monkeypatch):
+    # the failure message was replaced at once by "Profile saved"
+    window = window_factory(FakeProvider())
+    monkeypatch.setattr("paratext.reader.profile_dialog.ProfileDialog.exec", lambda dialog: 1)
+
+    def fail(profile, path=None):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr("paratext.profile.UserProfile.save", fail)
+    window.open_profile()
+    assert "Could not save your profile" in window.statusBar().currentMessage()

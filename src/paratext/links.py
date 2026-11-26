@@ -8,16 +8,16 @@ the links recorded for that path and title over to the new hash.
 
 from __future__ import annotations
 
-import contextlib
 import functools
 import hashlib
 import json
 import os
-import tempfile
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+
+from paratext.fileio import write_atomic
 
 KINDS = ("pdf", "data", "folder")
 #: data files whose contents are small text and can go into a prompt
@@ -120,17 +120,7 @@ class LinkStore:
 
     @_locked
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        text = json.dumps({"version": 1, "documents": self._data}, indent=1, ensure_ascii=False)
-        fd, tmp = tempfile.mkstemp(dir=self.path.parent, prefix=self.path.name + ".", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(text)
-            os.replace(tmp, self.path)
-        except BaseException:
-            with contextlib.suppress(OSError):
-                os.unlink(tmp)
-            raise
+        write_atomic(self.path, json.dumps({"version": 1, "documents": self._data}, indent=1, ensure_ascii=False))
         self._stamp = self._file_stamp()
 
     @_locked
@@ -295,7 +285,7 @@ def link_body(link: Link, max_chars: int) -> str:
             return f"(could not read as PDF: {e})"
     size = p.stat().st_size
     if p.suffix.lower() in TEXT_SUFFIXES and size <= MAX_TEXT_FILE_BYTES:
-        text = p.read_text(errors="replace")
+        text = p.read_text(encoding="utf-8", errors="replace")  # not the locale's code page (Windows)
         return text[:max_chars] + ("\n(truncated)" if len(text) > max_chars else "")
     return f"({p.suffix.lstrip('.') or 'binary'} file, {size} bytes; contents not included)"
 

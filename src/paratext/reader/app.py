@@ -53,13 +53,13 @@ from PySide6.QtWidgets import (
 )
 
 from paratext.ai.providers import ProviderError
-from paratext.config import Config, ConfigError
+from paratext.config import Config, ConfigError, default_config_path
 from paratext.engine import ContextEngine
 from paratext.glossary import Span
 from paratext.issues import IssueContext, issues_path, log_issue
 from paratext.links import Link, LinkStore
 from paratext.pdf import PdfDocument
-from paratext.profile import UserProfile
+from paratext.profile import UserProfile, default_profile_path
 from paratext.reader.pageview import UNDERLINE_COLORS, DocumentView, TermSpan, line_rects
 from paratext.reader.popup import ExplanationPopup
 from paratext.reader.profile_dialog import ProfileDialog
@@ -622,13 +622,14 @@ class ReaderWindow(QMainWindow):
         dialog = ProfileDialog(self.profile, parent=self)
         if dialog.exec():
             self.profile = dialog.profile
+            if self.doc:
+                self._make_engine()
             try:
                 self.profile.save()
             except OSError as e:
-                self.statusBar().showMessage(f"Could not save your profile: {e}")
-            if self.doc:
-                self._make_engine()
-            self.statusBar().showMessage("Profile saved; explanations will use it from now on.")
+                self.statusBar().showMessage(f"Could not save your profile (it applies until you quit): {e}")
+            else:
+                self.statusBar().showMessage("Profile saved; explanations will use it from now on.")
 
     # ------------------------------------------------------------------
     # pages and glossary
@@ -745,7 +746,7 @@ class ReaderWindow(QMainWindow):
             return
         self._glossary_version += 1
         self._refresh_visible()
-        done = len(self.engine.processed_pages) if self.engine else 0
+        done = len(self.engine.processed_pages)
         self.statusBar().showMessage(
             f"Page {page + 1}: {len(entries)} new terms explained by {self.engine.provider.name} "
             f"({done}/{self.doc.page_count} pages done)."
@@ -1121,8 +1122,10 @@ class ReaderWindow(QMainWindow):
             self._child_windows.remove(window)
 
     def open_in_new_window(self, path) -> ReaderWindow:
-        """A second reader window (same config, provider and profile), e.g. for a linked SI PDF."""
-        window = ReaderWindow(self.config, path, self.provider_name, executor=self.executor, profile=self.profile)
+        """A second reader window (same config, provider, audience and profile), e.g. for a linked SI PDF."""
+        window = ReaderWindow(
+            self.config, path, self.provider_name, executor=self.executor, profile=self.profile, audience=self.audience
+        )
         self._child_windows.append(window)
         window.destroyed.connect(lambda *_: self._forget_child(window))
         window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -1224,6 +1227,30 @@ class FileOpenHandler(QObject):
         return super().eventFilter(obj, event)
 
 
+def load_settings(config_path=None) -> tuple[Config, UserProfile, list[str]]:
+    """The config and the reader profile, plus a warning for each settings file that could not be read.
+
+    A typo in a hand-edited settings file must not stop the reader from starting (from Finder there is no terminal
+    to show the traceback). It starts without that file's settings but keeps its path, so toolbar changes are not
+    saved over it (or into another file), and a save from a dialog keeps the old file as ``NAME.broken``.
+    """
+    warnings = []
+    note = "Fix the file and restart, or save new settings in the reader (the old file is then kept as {}.broken)."
+    try:
+        config = Config.load(config_path)
+    except ConfigError as e:
+        path = Path(config_path) if config_path else default_config_path()
+        warnings.append(f"{e}\n\nStarting without these settings. {note.format(path.name)}")
+        config = Config(path=path)
+    try:
+        profile = UserProfile.load()
+    except ConfigError as e:
+        path = default_profile_path()
+        warnings.append(f"{e}\n\nStarting without your reader profile. {note.format(path.name)}")
+        profile = UserProfile(path=path)
+    return config, profile, warnings
+
+
 def run(pdf_path=None, provider_name=None, config_path=None, audience=None) -> int:
     import sys
 
@@ -1234,20 +1261,10 @@ def run(pdf_path=None, provider_name=None, config_path=None, audience=None) -> i
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("paraText")
     app.setApplicationDisplayName("paraText")
-    # A typo in a hand-edited settings file must not stop the reader from starting (from Finder there is no
-    # terminal to show the traceback). It starts without those settings and leaves the file alone.
-    try:
-        config = Config.load(config_path)
-    except ConfigError as e:
-        log.error("%s", e)
-        QMessageBox.warning(None, "paraText", f"{e}\n\nStarting without these settings. Fix the file and restart.")
-        config = Config(path=None)
-    try:
-        profile = UserProfile.load()
-    except ConfigError as e:
-        log.error("%s", e)
-        QMessageBox.warning(None, "paraText", f"{e}\n\nStarting without your reader profile.")
-        profile = UserProfile(path=None)
+    config, profile, warnings = load_settings(config_path)
+    for message in warnings:
+        log.error("%s", message)
+        QMessageBox.warning(None, "paraText", message)
     window = ReaderWindow(config, pdf_path, provider_name, profile=profile, audience=audience)
     app.installEventFilter(FileOpenHandler(window))
     window.show()

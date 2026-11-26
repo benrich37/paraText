@@ -470,3 +470,31 @@ def test_question_is_cached_with_the_links_it_was_asked_with(doc, tmp_path):
     engine = make_engine(doc, tmp_path, LinksDuringRequest(explanation="From the paper."), link_store=store)
     engine.ask_job("Which facet?")
     assert engine.cached_answer("Which facet?") is None  # asked again, now with the CSV
+
+
+def test_shutdown_drops_queued_jobs_quietly(tmp_path, caplog):
+    # cancel_futures ran each queued job's done callback, whose future.exception() raised CancelledError: a logged
+    # traceback for every page still queued after "Explain whole paper" when the paper was closed
+    from concurrent.futures import ThreadPoolExecutor
+
+    started, gate = threading.Event(), threading.Event()
+
+    class Slow(FakeProvider):
+        def complete(self, *args, **kwargs):
+            started.set()
+            gate.wait(5)
+            return super().complete(*args, **kwargs)
+
+    with PdfDocument(make_sample_pdf(tmp_path / "long.pdf", ["Density functional theory (DFT)."] * 5)) as doc:
+        executor = ThreadPoolExecutor(max_workers=1)
+        engine = ContextEngine(doc, Slow(), tmp_path / "cache", executor=executor)
+        calls = []
+        futures = [engine.ensure_page(0, callback=lambda *a: calls.append(a))]
+        assert started.wait(5)
+        futures += [engine.ensure_page(p, callback=lambda *a: calls.append(a)) for p in range(1, 5)]
+        engine.shutdown()  # one job running, four queued
+        gate.set()
+        executor.shutdown(wait=True)
+    assert sum(f.cancelled() for f in futures) == 4
+    assert len(calls) == 1 and calls[0][2] is None  # the job that was running still reports
+    assert not [r for r in caplog.records if "exception calling callback" in r.getMessage()]

@@ -38,6 +38,7 @@ from paratext.ai.providers import (
     preset_status,
     probe_claude_models,
     provider_capabilities,
+    split_command,
 )
 from paratext.config import Config
 from paratext.reader.textbox import ResultText, WrappedLabel
@@ -352,11 +353,8 @@ class SetupDialog(QDialog):
                 settings["effort"] = effort
             else:
                 settings.pop("effort", None)
-        if kind == "command":
-            try:
-                settings["command"] = shlex.split(self.command_edit.text())
-            except ValueError as e:  # an unfinished quote, usually while it is being typed
-                raise ProviderError(f"The command has an unmatched quote ({e}).") from e
+        if kind == "command":  # ProviderError for an unfinished quote, usually while it is being typed
+            settings["command"] = split_command(self.command_edit.text())
         return settings
 
     def _update_status(self, *_) -> None:

@@ -7,11 +7,9 @@ GUI must marshal them to its own thread.
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import json
 import os
-import tempfile
 import threading
 from collections.abc import Callable
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
@@ -19,6 +17,7 @@ from pathlib import Path
 
 from paratext.ai import prompts
 from paratext.ai.providers import Provider, ProviderError
+from paratext.fileio import write_atomic
 from paratext.glossary import (
     GlossaryEntry,
     Span,
@@ -36,6 +35,11 @@ CACHE_VERSION = 1
 #: one save at a time in this process: several engines can share a cache file (the same paper in two windows,
 #: or an engine the window replaced while one of its jobs was still running)
 _SAVE_LOCK = threading.Lock()
+
+
+def _replaces(entry: GlossaryEntry, existing: GlossaryEntry | None) -> bool:
+    """An entry takes a term's place if there is none yet, or if it is AI-written and the existing one an acronym."""
+    return existing is None or (existing.source == "acronym" and entry.source != "acronym")
 
 
 class ImmediateExecutor(Executor):
@@ -135,17 +139,28 @@ class ContextEngine:
             found.append((other.stat().st_mtime, other, data))
         return [(other, data) for _, other, data in sorted(found, key=lambda t: t[0])]
 
-    def _merge_cache(self, data: dict, check_words: bool) -> None:
-        """Add one cache file's contents; later calls win for the same term or explanation."""
+    def _merge_cache(self, data: dict, check_words: bool = False, keep_own: bool = False) -> None:
+        """Add one cache file's contents.
+
+        Loading, later files win for the same term or explanation. With ``keep_own`` (:meth:`save` taking in what
+        another engine wrote to the file) this engine's entries win instead, an AI entry still replaces an acronym
+        one, and terms proofreading removed stay removed. ``check_words`` drops explained selections whose words
+        are no longer there (a cache written before the PDF was edited).
+        """
         # keyed by normalize_term(term): re-key on load so files written under an older rule still work
         for v in data.get("terms", {}).values():
             try:
                 entry = GlossaryEntry(**v)
             except TypeError:  # written by another version: skip the entry rather than fail to open the paper
                 continue
-            self.terms[normalize_term(entry.term)] = entry
+            key = normalize_term(entry.term)
+            if not keep_own or (key not in self._removed and _replaces(entry, self.terms.get(key))):
+                self.terms[key] = entry
         self.processed_pages |= {p for p in data.get("processed_pages", []) if 0 <= p < self.doc.page_count}
-        self.explanations.update(data.get("explanations", {}))
+        explanations = data.get("explanations", {})
+        if keep_own:
+            explanations = {k: v for k, v in explanations.items() if k not in self.explanations}
+        self.explanations.update(explanations)
         seen = {(q["question"], q["answer"]) for q in self.questions}
         for q in data.get("questions", []):
             if "question" in q and "answer" in q and (q["question"], q["answer"]) not in seen:
@@ -184,43 +199,12 @@ class ContextEngine:
                 except OSError:
                     pass
 
-    def _absorb(self, data: dict) -> None:
-        """Take in what another engine saved to this cache file: what this one lacks is added, its own entries win.
-
-        Call with ``self._lock`` held. Unlike :meth:`_merge_cache` (loading, where later files win), nothing this
-        engine holds is replaced, and terms it removed while proofreading stay removed.
-        """
-        for v in data.get("terms", {}).values():
-            try:
-                entry = GlossaryEntry(**v)
-            except TypeError:
-                continue
-            key = normalize_term(entry.term)
-            if key in self._removed:
-                continue
-            existing = self.terms.get(key)
-            if existing is None or (existing.source == "acronym" and entry.source != "acronym"):
-                self.terms[key] = entry
-        self.processed_pages |= {p for p in data.get("processed_pages", []) if 0 <= p < self.doc.page_count}
-        for k, v in data.get("explanations", {}).items():
-            self.explanations.setdefault(k, v)
-        seen = {(q["question"], q["answer"]) for q in self.questions}
-        for q in data.get("questions", []):
-            if "question" in q and "answer" in q and (q["question"], q["answer"]) not in seen:
-                self.questions.append(q)
-                seen.add((q["question"], q["answer"]))
-        spots = {(e["page"], e["start"], e["end"]) for e in self.explained}
-        for e in data.get("explained", []):
-            if {"phrase", "page", "start", "end"} <= set(e) and (e["page"], e["start"], e["end"]) not in spots:
-                self.explained.append(e)
-                spots.add((e["page"], e["start"], e["end"]))
-
     def save(self) -> None:
         """Write the cache file, first taking in anything another engine saved there since.
 
         Engines run jobs on two workers, and the same file can belong to several engines (the paper open in two
-        windows, or an engine replaced while a job was running), so saves are serialized, each writes its own
-        temporary file, and the data is copied under the lock before it is serialized.
+        windows, or an engine replaced while a job was running), so saves are serialized and the data is copied
+        under the lock before it is serialized.
         """
         path = self.cache_path
         if not path:
@@ -229,7 +213,7 @@ class ContextEngine:
             on_disk = self._read_cache(path) if path.exists() else None
             with self._lock:
                 if on_disk is not None:
-                    self._absorb(on_disk)
+                    self._merge_cache(on_disk, keep_own=True)
                 data = {
                     "version": CACHE_VERSION,
                     "document": str(self.doc.path.resolve()),
@@ -244,17 +228,7 @@ class ContextEngine:
                     "questions": [dict(q) for q in self.questions],
                     "explained": [dict(e) for e in self.explained],
                 }
-            text = json.dumps(data, indent=1, ensure_ascii=False)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    f.write(text)
-                os.replace(tmp, path)
-            except BaseException:
-                with contextlib.suppress(OSError):
-                    os.unlink(tmp)
-                raise
+            write_atomic(path, json.dumps(data, indent=1, ensure_ascii=False))
 
     # ------------------------------------------------------------------
     # glossary
@@ -271,8 +245,7 @@ class ContextEngine:
         with self._lock:
             for entry in entries:
                 key = normalize_term(entry.term)
-                existing = self.terms.get(key)
-                if existing is None or (existing.source == "acronym" and entry.source != "acronym"):
+                if _replaces(entry, self.terms.get(key)):
                     self.terms[key] = entry
                     added += 1
         return added
@@ -558,7 +531,7 @@ class ContextEngine:
 
     def _finish(self, key, future: Future, callback, label) -> None:
         self._pending.discard(key)
-        if callback is None:
+        if callback is None or future.cancelled():  # cancelled by shutdown(): nobody is waiting for it
             return
         error = future.exception()
         callback(label, None if error else future.result(), error)

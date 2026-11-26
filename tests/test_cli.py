@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 
 import pytest
@@ -141,10 +142,26 @@ def test_bare_pdf_opens_the_reader(monkeypatch, tmp_path):
     assert main(["--config", config, "paper.pdf", "--provider", "none"]) == 0
     assert main([]) == 0
     assert main(["read", "paper.pdf", "--audience", "a chemist"]) == 0
-    assert [c[0][0] for c in calls] == ["paper.pdf", "paper.pdf", None, "paper.pdf"]
+    assert main(["--provider", "none", "paper.pdf"]) == 0  # options before the PDF
+    assert [c[0][0] for c in calls] == ["paper.pdf", "paper.pdf", None, "paper.pdf", "paper.pdf"]
     assert calls[1][0][1:] == ("none", config) and calls[3][1]["audience"] == "a chemist"
+    assert calls[4][0][1] == "none"
     with pytest.raises(SystemExit):
         main(["-h"])
+    with pytest.raises(SystemExit) as exit_info:  # argparse's message, not an AttributeError
+        main(["--config"])
+    assert exit_info.value.code == 2
+
+
+def test_unreadable_pdf_is_reported(tmp_path):
+    # PyMuPDF's errors reached the terminal as tracebacks
+    bad = tmp_path / "notes.pdf"
+    bad.write_text("not a PDF", encoding="utf-8")
+    for path in (tmp_path / "missing.pdf", bad):
+        with pytest.raises(SystemExit, match=re.escape(f"could not open {path}")):
+            main(["glossary", str(path), "--provider", "none"])
+        with pytest.raises(SystemExit, match="could not open"):
+            main(["links", str(path)])
 
 
 def test_broken_config_is_reported(tmp_path, capsys):

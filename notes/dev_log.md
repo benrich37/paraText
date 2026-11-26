@@ -2,6 +2,52 @@
 
 Newest entries first. Record decisions and their reasons, not only what changed.
 
+## 2026-11-07: second pass over the code scan
+
+A re-read of the package, including the 2026-11-06 fixes, found these. Each was reproduced first and has a
+regression test; all 11 new tests fail on the previous code.
+- **Settings files were written in the locale's encoding** (`Config.save`, `UserProfile.save`, `write_template`;
+  reading linked text files and `paratext config` too). On Windows (cp1252) the profile's own help text ("…")
+  became byte 0x85, so *every* saved profile was invalid UTF-8; and `read_toml` caught only `TOMLDecodeError`,
+  while tomllib raises `UnicodeDecodeError` for that, so the next start crashed. Under a Latin-1 locale here,
+  saving a profile raised and an accented audience came back unreadable. Everything is UTF-8 now, `read_toml`
+  reports non-UTF-8 files as `ConfigError`, and a test runs the writes under
+  `-X warn_default_encoding -W error::EncodingWarning`, so it fails on any platform, not only Windows CI.
+- **Saving over a broken settings file lost it.** Since 2026-11-06 the reader starts without a config that does
+  not parse, and its "Set up AI…" bar points straight at the dialog whose "Save and use" replaced the
+  hand-edited file (every other provider in it). The same for "About you…" and the profile. `write_settings`
+  now keeps such a file as `NAME.broken` first. Chosen over refusing to save: a user who cannot fix TOML by
+  hand would otherwise be stuck.
+- **The broken-config fallback saved to the wrong file.** `run()` used `Config(path=None)`; with a broken
+  `--config other.toml`, the next toolbar change loaded and rewrote the *default* config, replacing its provider
+  and resetting its audience. The fallback keeps the broken file's path (`load_settings`, split out of `run` so
+  it can be tested), so `_save_config` fails on it and leaves it alone.
+- **`[providers]` with `claude-cli = "claude -p"`** (valid TOML, wrong shape) passed `Config.load` and raised
+  `ValueError` when a paper was opened and in the setup dialog. It is a `ConfigError` now.
+- **Closing a paper with queued jobs logged a traceback per job.** `shutdown(cancel_futures=True)` runs the done
+  callbacks of cancelled futures, and `_finish` called `future.exception()`, which raises `CancelledError` for
+  them (4 tracebacks for 4 queued pages; 60 after "Explain whole paper" on a long paper).
+- **OpenAI-compatible errors escaped as non-`ProviderError`s**: `RemoteDisconnected` (a local server restarting;
+  urllib wraps only send errors in `URLError`, not `getresponse()`), TLS errors, and a non-JSON 200 reply (a
+  proxy page). `paratext glossary` printed a traceback, and `log_issue`'s "never raises" did not hold.
+- **An unmatched quote in a string `command` in config.toml** raised `ValueError` from `CommandProvider`,
+  `preset_status` and `probe_claude_models` (only the setup dialog's own field was handled). One
+  `split_command` now serves all four places.
+- **CLI**: a missing or non-PDF file gave a PyMuPDF traceback (now "error: could not open …"); `paratext
+  --config` without a value crashed with `AttributeError` after "read" was taken as the path; and
+  `paratext --provider x paper.pdf` (roadmap 22) now works: `read` goes right after the global `--config`.
+- **Small ones**: a profile that failed to save showed "Profile saved" over the error; a linked PDF's window
+  ignored `--audience`; the macOS launcher was written in the locale's encoding.
+
+Simplified: `_absorb` duplicated `_merge_cache` almost line for line; it is now `_merge_cache(keep_own=True)`,
+with the "AI entry replaces acronym entry" rule in one function (`_replaces`) shared with `add_entries`. The
+temporary-file write that engine, links, config and profile each had is `fileio.write_atomic`.
+
+Looked at and left alone: two windows on the same paper still each keep their own copy of a term, so a
+proofreading fix or removal in one can be undone by the other's later save (roadmap 22). The setup dialog's
+"Explain for" field shows the file's audience, so saving there replaces a `--audience` session audience; the
+field is visible, so that is what the reader chose.
+
 ## 2026-11-06: code scan, 12 bugs fixed
 
 No reported issue was open. A read-through of the package (not the legacy tkinter widget) found these; each was

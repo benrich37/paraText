@@ -81,10 +81,9 @@ class UserProfile:
     def save(self, path=None) -> Path:
         path = Path(path) if path else (self.path or default_profile_path())
         data = {k: v for k, v in asdict(self).items() if k != "path"}
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(PROFILE_TEMPLATE_HELP + tomli_w.dumps(data))
-        os.replace(tmp, path)
+        from paratext.config import write_settings
+
+        write_settings(path, PROFILE_TEMPLATE_HELP + tomli_w.dumps(data))  # UTF-8; keeps an unreadable file
         self.path = path
         return path
 

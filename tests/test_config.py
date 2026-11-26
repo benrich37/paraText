@@ -1,10 +1,13 @@
 import os
+import subprocess
+import sys
+import textwrap
 
 import pytest
 
 from paratext.ai.prompts import DEFAULT_AUDIENCE
 from paratext.ai.providers import CommandProvider, ProviderError
-from paratext.config import Config, write_template
+from paratext.config import Config, ConfigError, write_template
 
 
 def test_missing_config_gives_offline_defaults(tmp_path):
@@ -87,3 +90,62 @@ def test_invalid_toml_names_the_file(tmp_path):
     profile.write_text("known = [\n")
     with pytest.raises(ConfigError, match="profile.toml"):
         UserProfile.load(profile)
+
+
+def test_settings_files_are_utf8_whatever_the_locale(tmp_path):
+    # Files were written in the locale's encoding. On Windows the profile's "…" became a byte that is not UTF-8,
+    # so the next start could not read the profile, and accented or CJK text could not be saved at all. Every text
+    # write left to the locale raises here, on any platform.
+    script = textwrap.dedent(
+        """
+        import sys
+        from pathlib import Path
+        from paratext.config import Config, write_template
+        from paratext.links import Link, link_body
+        from paratext.profile import UserProfile
+
+        d, text = Path(sys.argv[1]), "Schrödinger, Å, 电催化"
+        Config(audience=text, path=d / "config.toml").save()
+        assert Config.load(d / "config.toml").audience == text
+        UserProfile(background=text, path=d / "profile.toml").save()
+        assert UserProfile.load(d / "profile.toml").background == text
+        write_template(d / "template.toml", audience=text)
+        assert Config.load(d / "template.toml").audience == text
+        (d / "data.csv").write_bytes(text.encode("utf-8"))
+        assert link_body(Link(str(d / "data.csv")), 1000) == text
+        """
+    )
+    flags = ["-X", "warn_default_encoding", "-W", "error::EncodingWarning"]
+    result = subprocess.run([sys.executable, *flags, "-c", script, str(tmp_path)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_config_that_is_not_utf8_is_reported(tmp_path):
+    # tomllib raises UnicodeDecodeError, not TOMLDecodeError, for such a file: the reader crashed on start
+    path = tmp_path / "config.toml"
+    path.write_bytes('audience = "Schrödinger"\n'.encode("latin-1"))
+    with pytest.raises(ConfigError, match="config.toml is not valid TOML"):
+        Config.load(path)
+
+
+def test_saving_over_a_broken_file_keeps_it(tmp_path):
+    # The reader starts without a broken config, and its "Set up AI…" button is right there: saving from the
+    # dialog replaced the hand-edited file, and with it every other provider in it
+    path = tmp_path / "config.toml"
+    broken = 'default_provider = "mine\n[providers.mine]\nkind = "command"\ncommand = ["my-llm"]\n'
+    path.write_text(broken, encoding="utf-8")
+    Config(default_provider="claude-cli", path=path).save()
+    assert Config.load(path).default_provider == "claude-cli"
+    assert (tmp_path / "config.toml.broken").read_text(encoding="utf-8") == broken
+    Config(default_provider="anthropic", path=path).save()  # a valid file is simply replaced
+    assert Config.load(path).default_provider == "anthropic"
+    assert (tmp_path / "config.toml.broken").read_text(encoding="utf-8") == broken
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["config.toml", "config.toml.broken"]
+
+
+def test_provider_that_is_not_a_table_is_reported(tmp_path):
+    # valid TOML, wrong shape: make_provider raised ValueError when a paper was opened, and the setup dialog failed
+    path = tmp_path / "config.toml"
+    path.write_text('default_provider = "claude-cli"\n[providers]\nclaude-cli = "claude -p"\n', encoding="utf-8")
+    with pytest.raises(ConfigError, match=r"\[providers.claude-cli\]"):
+        Config.load(path)
